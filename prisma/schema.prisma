@@ -1,0 +1,89 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               Int              @id @default(autoincrement())
+  email            String           @unique
+  password         String
+  name             String
+  role             String           // "SUPER_ADMIN", "CHARITY_STAFF", "SERVICE_PROVIDER"
+  charityId        Int?
+  charity          Charity?         @relation(fields: [charityId], references: [id], onDelete: Cascade)
+  providerId       Int?
+  provider         ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+model Charity {
+  id        Int              @id @default(autoincrement())
+  name      String
+  code      String           @unique
+  email     String?
+  phone     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  requests  ServiceRequest[]
+  users     User[]
+}
+
+model ServiceProvider {
+  id        Int              @id @default(autoincrement())
+  name      String
+  code      String           @unique
+  email     String?
+  phone     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  offers    PriceOffer[]
+  users     User[]
+  requests  ServiceRequest[] // assigned requests (once provider is selected)
+}
+
+model ServiceRequest {
+  id                            Int              @id @default(autoincrement())
+  name                          String           @unique // e.g. "SR-2026-0001"
+  beneficiaryName               String
+  beneficiaryNationalId          String
+  charityId                     Int
+  charity                       Charity          @relation(fields: [charityId], references: [id], onDelete: Cascade)
+  serviceProviderId             Int?
+  serviceProvider               ServiceProvider? @relation(fields: [serviceProviderId], references: [id], onDelete: SetNull)
+  dateRequest                   DateTime         @default(now())
+  status                        String           // "DRAFT", "RFQ", "BENEFICIARY_CONTRIBUTION", "RAISING_CLAIM", "CLAIM_REVIEW", "COMPLETED", "CANCELLED"
+  serviceCost                   Float            @default(0)
+  charityContributionPercentage Float            @default(100)
+  charityContributionValue      Float            @default(0)
+  beneficiaryContributionValue  Float            @default(0)
+  claimType                     String?          // "full_claim", "partial_claim"
+  claimState                    String?          // "claim_done", "claim_review"
+  isRaisingClaim                Boolean          @default(false)
+  description                   String?
+  createdAt                     DateTime         @default(now())
+  updatedAt                     DateTime         @updatedAt
+  priceOffers                   PriceOffer[]
+}
+
+model PriceOffer {
+  id             Int             @id @default(autoincrement())
+  requestId      Int
+  request        ServiceRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  providerId     Int
+  provider       ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  amountTotal    Float
+  status         String          // "DRAFT", "SENT", "APPROVED", "REJECTED"
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([requestId, providerId])
+}
