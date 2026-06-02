@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -25,15 +25,18 @@ model User {
 }
 
 model Charity {
-  id        Int              @id @default(autoincrement())
-  name      String
-  code      String           @unique
-  email     String?
-  phone     String?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  requests  ServiceRequest[]
-  users     User[]
+  id         Int              @id @default(autoincrement())
+  name       String
+  code       String           @unique
+  email      String?
+  phone      String?
+  token      String?          @unique
+  providerId Int?
+  provider   ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  requests   ServiceRequest[]
+  users      User[]
 }
 
 model ServiceProvider {
@@ -47,6 +50,7 @@ model ServiceProvider {
   offers    PriceOffer[]
   users     User[]
   requests  ServiceRequest[] // assigned requests (once provider is selected)
+  charities Charity[]
 }
 
 model ServiceRequest {

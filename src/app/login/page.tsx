@@ -3,8 +3,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { loginSchema } from "@/lib/zodSchemas";
 import toast from "react-hot-toast";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,16 +116,30 @@ export default function LoginPage() {
 
             <div className="input-group">
               <label htmlFor="password">كلمة المرور</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute left-3 top-3.5 text-emerald-600/50 hover:text-emerald-500 transition-colors focus:outline-none"
+                >
+                  {showPassword ? (
+                    <Eye className="h-4 w-4" />
+                  ) : (
+                    <EyeOff className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <div className="pt-2">
@@ -145,6 +162,15 @@ export default function LoginPage() {
               </button>
             </div>
           </form>
+
+          <div className="mt-4 text-center">
+            <span className="text-xs text-emerald-400 font-medium">
+              ليس لديك حساب؟{" "}
+              <Link href="/register" className="font-bold text-white hover:text-emerald-300 underline transition-all">
+                سجل حساباً جديداً الآن
+              </Link>
+            </span>
+          </div>
 
           {/* Quick Mock Login Accounts */}
           <div className="mt-8 pt-6 border-t border-emerald-500/10">

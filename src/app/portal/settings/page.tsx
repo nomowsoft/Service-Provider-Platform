@@ -1,16 +1,21 @@
 "use client";
-
 import { useState, useEffect, useCallback } from "react";
-import { 
-  User, 
-  KeyRound, 
-  Webhook, 
-  Copy, 
-  Check, 
+import {
+  User,
+  KeyRound,
+  Webhook,
+  Copy,
+  Check,
   Settings as SettingsIcon,
   Building,
   Wrench,
-  Lock
+  Lock,
+  Plus,
+  Trash2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  AlertTriangle
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -47,6 +52,16 @@ export default function SettingsPage() {
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+
+  // Charity Integration state
+  const [charities, setCharities] = useState<any[]>([]);
+  const [charityName, setCharityName] = useState("");
+  const [isAddingCharity, setIsAddingCharity] = useState(false);
+  const [charitySaving, setCharitySaving] = useState(false);
+  const [charityError, setCharityError] = useState("");
+  const [charityErrorField, setCharityErrorField] = useState("");
+  const [charitySortField, setCharitySortField] = useState<"code" | "name" | null>(null);
+  const [charitySortDirection, setCharitySortDirection] = useState<"asc" | "desc">("asc");
 
   // API Config (Mock keys for beautiful visual UX)
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -129,6 +144,131 @@ export default function SettingsPage() {
     }
   };
 
+  const fetchCharities = useCallback(async () => {
+    try {
+      const res = await fetch("/api/providers/charity-tokens");
+      if (!res.ok) throw new Error("فشل تحميل الجمعيات");
+      const data = await res.json();
+      setCharities(data.charities || []);
+    } catch (error) {
+      console.error("Fetch Charities Error:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "charities") {
+      fetchCharities();
+    }
+  }, [activeTab, fetchCharities]);
+
+  const handleAddCharity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCharityError("");
+    setCharityErrorField("");
+
+    if (!charityName.trim()) {
+      setCharityError("يرجى إدخال اسم الجمعية");
+      setCharityErrorField("charityName");
+      return;
+    }
+
+    setCharitySaving(true);
+    try {
+      const res = await fetch("/api/providers/charity-tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: charityName }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCharityErrorField("charityName");
+        throw new Error(data.message || "فشل إضافة الجمعية");
+      }
+
+      toast.success("تم إضافة الجمعية بنجاح!");
+      setCharityName("");
+      setIsAddingCharity(false);
+      fetchCharities();
+    } catch (error) {
+      const err = error as Error;
+      setCharityError(err.message || "حدث خطأ أثناء إضافة الجمعية");
+    } finally {
+      setCharitySaving(false);
+    }
+  };
+
+  const performDelete = async (id: number) => {
+    try {
+      const res = await fetch(`/api/providers/charity-tokens/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "فشل حذف الجمعية");
+      toast.success("تم حذف الجمعية بنجاح");
+      fetchCharities();
+    } catch (error) {
+      const err = error as Error;
+      toast.error(err.message || "حدث خطأ أثناء الحذف");
+    }
+  };
+
+  const handleDeleteCharity = (id: number) => {
+    toast((t) => (
+      <div
+        className="flex items-start gap-4 p-5 bg-white dark:bg-[#021f18] border border-slate-100 dark:border-emerald-900/60 shadow-2xl rounded-2xl min-w-[320px] max-w-[380px] animate-in fade-in slide-in-from-top-4 duration-300"
+        dir="rtl"
+      >
+        <div className="flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40 animate-bounce">
+          <AlertTriangle size={20} className="stroke-[2.5]" />
+        </div>
+
+        <div className="flex-1 space-y-1">
+          <h4 className="text-sm font-extrabold text-slate-900 dark:text-white leading-snug">
+            تأكيد حذف الجمعية
+          </h4>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed text-justify">
+            هل أنت متأكد من رغبتك في حذف هذه الجمعية؟ سيتم قطع الاتصال البرمجي والربط التقني معها نهائياً.
+          </p>
+          <div className="flex justify-end gap-2 pt-2.5">
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="px-3.5 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-emerald-950/30 rounded-xl transition duration-150 active:scale-95"
+            >
+              إلغاء
+            </button>
+            <button
+              onClick={async () => {
+                toast.dismiss(t.id);
+                await performDelete(id);
+              }}
+              className="px-4 py-1.5 text-xs font-bold bg-gradient-to-r from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white rounded-xl shadow-lg shadow-rose-500/20 transition duration-150 active:scale-95"
+            >
+              تأكيد الحذف
+            </button>
+          </div>
+        </div>
+      </div>
+    ), {
+      duration: 10000,
+      position: "top-center",
+      style: {
+        background: "transparent",
+        boxShadow: "none",
+        border: "none",
+        padding: 0,
+      }
+    });
+  };
+
+  const handleCharitySort = (field: "code" | "name") => {
+    if (charitySortField === field) {
+      setCharitySortDirection(charitySortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setCharitySortField(field);
+      setCharitySortDirection("asc");
+    }
+  };
+
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedKey(id);
@@ -147,7 +287,7 @@ export default function SettingsPage() {
 
   // Developer integration details based on role
   const mockPublicKey = user
-    ? (user.role === "CHARITY_STAFF" 
+    ? (user.role === "CHARITY_STAFF"
       ? `pub_charity_live_9a87d623${user.charity?.id || 1}eb21`
       : `pub_provider_live_8f3d2e1c${user.provider?.id || 1}ab90`)
     : "";
@@ -157,6 +297,15 @@ export default function SettingsPage() {
       ? `sec_charity_live_3d21f8a7${user.charity?.id || 1}ee55`
       : `sec_provider_live_9b4e1a2f${user.provider?.id || 1}dd44`)
     : "";
+
+  const sortedCharities = [...charities].sort((a, b) => {
+    if (!charitySortField) return 0;
+    const valA = a[charitySortField] || "";
+    const valB = b[charitySortField] || "";
+    return charitySortDirection === "asc"
+      ? valA.localeCompare(valB, "ar", { numeric: true, sensitivity: "base" })
+      : valB.localeCompare(valA, "ar", { numeric: true, sensitivity: "base" });
+  });
 
   return (
     <div className="space-y-6">
@@ -170,16 +319,15 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        
+
         {/* Navigation Sidebar */}
         <div className="space-y-2">
           <button
             onClick={() => setActiveTab("profile")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition ${
-              activeTab === "profile" 
-                ? "bg-emerald-950 text-white shadow-sm"
-                : "bg-white dark:bg-[#03251c]/30 text-emerald-800 dark:text-emerald-300 border border-emerald-100/50 hover:bg-emerald-50"
-            }`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition ${activeTab === "profile"
+              ? "bg-emerald-950 text-white shadow-sm"
+              : "bg-white dark:bg-[#03251c]/30 text-emerald-800 dark:text-emerald-300 border border-emerald-100/50 hover:bg-emerald-50"
+              }`}
           >
             <User size={16} />
             <span>الملف الشخصي</span>
@@ -187,11 +335,10 @@ export default function SettingsPage() {
 
           <button
             onClick={() => setActiveTab("password")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition ${
-              activeTab === "password" 
-                ? "bg-emerald-950 text-white shadow-sm"
-                : "bg-white dark:bg-[#03251c]/30 text-emerald-800 dark:text-emerald-300 border border-emerald-100/50 hover:bg-emerald-50"
-            }`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition ${activeTab === "password"
+              ? "bg-emerald-950 text-white shadow-sm"
+              : "bg-white dark:bg-[#03251c]/30 text-emerald-800 dark:text-emerald-300 border border-emerald-100/50 hover:bg-emerald-50"
+              }`}
           >
             <KeyRound size={16} />
             <span>تغيير كلمة المرور</span>
@@ -200,14 +347,26 @@ export default function SettingsPage() {
           {(user?.role === "CHARITY_STAFF" || user?.role === "SERVICE_PROVIDER") && (
             <button
               onClick={() => setActiveTab("developer")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition ${
-                activeTab === "developer" 
-                  ? "bg-emerald-950 text-white shadow-sm"
-                  : "bg-white dark:bg-[#03251c]/30 text-emerald-800 dark:text-emerald-300 border border-emerald-100/50 hover:bg-emerald-50"
-              }`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition ${activeTab === "developer"
+                ? "bg-emerald-950 text-white shadow-sm"
+                : "bg-white dark:bg-[#03251c]/30 text-emerald-800 dark:text-emerald-300 border border-emerald-100/50 hover:bg-emerald-50"
+                }`}
             >
               <Webhook size={16} />
               <span>إعدادات المطورين والربط API</span>
+            </button>
+          )}
+
+          {user?.role === "SERVICE_PROVIDER" && (
+            <button
+              onClick={() => setActiveTab("charities")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition ${activeTab === "charities"
+                ? "bg-emerald-950 text-white shadow-sm"
+                : "bg-white dark:bg-[#03251c]/30 text-emerald-800 dark:text-emerald-300 border border-emerald-100/50 hover:bg-emerald-50"
+                }`}
+            >
+              <Building size={16} />
+              <span>الجمعيات</span>
             </button>
           )}
         </div>
@@ -215,7 +374,7 @@ export default function SettingsPage() {
         {/* Content Panel */}
         <div className="lg:col-span-3">
           <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 min-h-[400px]">
-            
+
             {/* Tab: Profile */}
             {activeTab === "profile" && (
               <div className="space-y-6">
@@ -318,7 +477,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-5">
-                  
+
                   {/* Entity display */}
                   <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-4 border border-emerald-100/20 space-y-2">
                     <span className="text-xs font-bold text-slate-500 block">الجهة المعرفة للربط:</span>
@@ -340,20 +499,6 @@ export default function SettingsPage() {
                           </div>
                         </>
                       )}
-                    </div>
-                  </div>
-
-                  {/* Public Key field */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-emerald-950 dark:text-white">المفتاح العام للربط (Public API Key)</label>
-                    <div className="flex items-center gap-2 bg-slate-50 dark:bg-emerald-950/20 border border-slate-200 dark:border-emerald-950 rounded-xl px-4 py-3">
-                      <code className="text-xs font-mono flex-1 text-slate-700 dark:text-slate-300 overflow-x-auto select-all">{mockPublicKey}</code>
-                      <button
-                        onClick={() => copyToClipboard(mockPublicKey, "pub_key")}
-                        className="text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-400 transition"
-                      >
-                        {copiedKey === "pub_key" ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
-                      </button>
                     </div>
                   </div>
 
@@ -385,7 +530,7 @@ export default function SettingsPage() {
                         defaultValue="https://example.org/api/webhooks/server-provider"
                         className="text-xs py-3 px-4 border rounded-xl flex-1 focus:ring-1 focus:ring-emerald-500"
                       />
-                      <button 
+                      <button
                         onClick={() => toast.success("تم تحديث رابط الويب هوك بنجاح")}
                         className="bg-emerald-950 hover:bg-emerald-900 text-white rounded-xl px-5 text-xs font-bold"
                       >
@@ -394,6 +539,182 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
+                </div>
+              </div>
+            )}
+
+            {/* Tab: Charities (Service Provider Only) */}
+            {activeTab === "charities" && user?.role === "SERVICE_PROVIDER" && (
+              <div className="space-y-6">
+                <div className="border-b border-emerald-50 dark:border-emerald-950 pb-3 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-extrabold text-emerald-950 dark:text-white">إدارة الجمعيات المرتبطة</h2>
+                    <p className="text-[10px] text-slate-500 mt-1">قم بإدارة الجمعيات الأهلية المرتبطة وتحديد توكن الربط الخاص بكل جمعية</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsAddingCharity(!isAddingCharity);
+                      setCharityError("");
+                      setCharityErrorField("");
+                      setCharityName("");
+                    }}
+                    className="bg-emerald-950 hover:bg-emerald-900 text-white rounded-xl px-4 py-2 text-xs font-bold flex items-center gap-1.5 transition"
+                  >
+                    <Plus size={14} />
+                    {isAddingCharity ? "إلغاء الإضافة" : "ربط جمعية جديدة"}
+                  </button>
+                </div>
+
+                {isAddingCharity && (
+                  <form
+                    onSubmit={handleAddCharity}
+                    noValidate
+                    className="bg-slate-50 dark:bg-emerald-950/20 p-5 rounded-2xl border border-slate-100 dark:border-emerald-950/40 space-y-4 animate-in fade-in slide-in-from-top-4 duration-200"
+                  >
+                    <h3 className="text-xs font-bold text-emerald-950 dark:text-white">ربط جمعية جديدة بمزود الخدمة</h3>
+
+                    {charityError && (
+                      <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 p-4 text-xs text-rose-500 text-center font-medium animate-shake">
+                        {charityError}
+                      </div>
+                    )}
+
+                    <div className="space-y-1 max-w-md">
+                      <label className="text-[10px] font-bold text-slate-500 block">اسم الجمعية</label>
+                      <input
+                        type="text"
+                        required
+                        value={charityName}
+                        onChange={(e) => {
+                          setCharityName(e.target.value);
+                          if (charityErrorField === "charityName") {
+                            setCharityError("");
+                            setCharityErrorField("");
+                          }
+                        }}
+                        placeholder="مثال: جمعية البر الأهلية"
+                        className={`w-full text-xs py-2.5 px-3 border rounded-xl focus:ring-1 focus:ring-emerald-500 bg-white dark:bg-[#03251c]/30 transition ${charityErrorField === "charityName"
+                          ? "!border-rose-500/80 focus:!border-rose-500 focus:!shadow-[0_0_0_4px_rgba(244,63,94,0.15)] dark:!border-rose-500/60 dark:focus:!border-rose-400 dark:focus:!shadow-[0_0_0_4px_rgba(244,63,94,0.25)]"
+                          : "border-slate-200 dark:border-emerald-950/60"
+                          }`}
+                      />
+                      <span className="text-[9px] text-slate-400 block mt-1">ملاحظة: سيتم توليد توكن الربط للجمعية تلقائياً بمجرد الحفظ.</span>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingCharity(false);
+                          setCharityError("");
+                          setCharityErrorField("");
+                          setCharityName("");
+                        }}
+                        className="border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl px-4 py-2 text-xs font-bold transition"
+                      >
+                        إلغاء
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={charitySaving}
+                        className="bg-emerald-950 hover:bg-emerald-900 text-white rounded-xl px-4 py-2 text-xs font-bold transition"
+                      >
+                        {charitySaving ? "جاري الحفظ..." : "حفظ وربط"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="border border-slate-100 dark:border-emerald-950/50 rounded-2xl overflow-hidden bg-white dark:bg-[#03251c]/10">
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-right text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-emerald-950/20 text-slate-500 font-bold border-b border-slate-100 dark:border-emerald-950/40">
+                          <th
+                            className="p-4 cursor-pointer select-none hover:text-emerald-500 transition-colors"
+                            onClick={() => handleCharitySort("code")}
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>كود الجمعية</span>
+                              {charitySortField === "code" ? (
+                                charitySortDirection === "asc" ? (
+                                  <ArrowUp size={12} className="text-emerald-500" />
+                                ) : (
+                                  <ArrowDown size={12} className="text-emerald-500" />
+                                )
+                              ) : (
+                                <ArrowUpDown size={12} className="text-slate-400/40 dark:text-slate-300/30" />
+                              )}
+                            </div>
+                          </th>
+                          <th
+                            className="p-4 cursor-pointer select-none hover:text-emerald-500 transition-colors"
+                            onClick={() => handleCharitySort("name")}
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>اسم الجمعية</span>
+                              {charitySortField === "name" ? (
+                                charitySortDirection === "asc" ? (
+                                  <ArrowUp size={12} className="text-emerald-500" />
+                                ) : (
+                                  <ArrowDown size={12} className="text-emerald-500" />
+                                )
+                              ) : (
+                                <ArrowUpDown size={12} className="text-slate-400/40 dark:text-slate-300/30" />
+                              )}
+                            </div>
+                          </th>
+                          <th className="p-4">توكن الربط</th>
+                          <th className="p-4">تاريخ الربط</th>
+                          <th className="p-4 text-center">الإجراءات</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedCharities.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-8 text-center text-slate-400 font-medium">
+                              لا توجد جمعيات مرتبطة حالياً. اضغط على "ربط جمعية جديدة" للبدء.
+                            </td>
+                          </tr>
+                        ) : (
+                          sortedCharities.map((item) => (
+                            <tr key={item.id} className="border-b border-slate-100 dark:border-emerald-950/20 last:border-0 hover:bg-slate-50/50 dark:hover:bg-emerald-950/10 transition">
+                              <td className="p-4 font-mono font-bold text-slate-600 dark:text-slate-300">{item.code}</td>
+                              <td className="p-4 font-bold text-emerald-950 dark:text-white">{item.name}</td>
+                              <td className="p-4">
+                                <div className="flex items-center gap-2 bg-slate-50 dark:bg-emerald-950/15 border border-slate-100 dark:border-emerald-950/40 px-2.5 py-1.5 rounded-lg w-fit">
+                                  <code className="font-mono text-[10px] text-slate-600 dark:text-slate-300 max-w-[150px] truncate select-all">{item.token}</code>
+                                  <button
+                                    type="button"
+                                    onClick={() => copyToClipboard(item.token, `tok_${item.id}`)}
+                                    className="text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-400 transition"
+                                  >
+                                    {copiedKey === `tok_${item.id}` ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="p-4 text-slate-400 text-[10px]">
+                                {new Date(item.createdAt).toLocaleDateString("ar-SA", {
+                                  year: "numeric",
+                                  month: "long",
+                                  day: "numeric"
+                                })}
+                              </td>
+                              <td className="p-4 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCharity(item.id)}
+                                  className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 p-2 rounded-lg transition inline-flex items-center justify-center"
+                                  title="حذف الربط"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}

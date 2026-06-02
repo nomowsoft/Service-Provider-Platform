@@ -6,16 +6,12 @@ import Link from "next/link";
 import { 
   FileText, 
   Search, 
-  Plus, 
-  X, 
   Calendar,
   Building,
   Activity,
-  Calculator,
   ChevronRight
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { serviceRequestSchema } from "@/lib/zodSchemas";
 
 interface RequestItem {
   id: number;
@@ -45,15 +41,28 @@ export default function RequestsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
 
-  // Create Request Modal states
-  const [showModal, setShowModal] = useState(false);
-  const [beneficiaryName, setBeneficiaryName] = useState("");
-  const [beneficiaryNationalId, setBeneficiaryNationalId] = useState("");
-  const [description, setDescription] = useState("");
-  const [charityPercentage, setCharityPercentage] = useState<number>(100);
-  const [beneficiaryValue, setBeneficiaryValue] = useState<number>(0);
-  const [submitting, setSubmitting] = useState(false);
-  const [formErrors, setFormErrors] = useState<string>("");
+  // Sync activeTab with URL tab param
+  useEffect(() => {
+    const tabParam = searchParams?.get("tab");
+    if (tabParam === "RFQ" || tabParam === "CLAIMS" || tabParam === "COMPLETED" || tabParam === "PENDING") {
+      setActiveTab(tabParam);
+    } else {
+      setActiveTab("ALL");
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    const params = new URLSearchParams(window.location.search);
+    if (tabId === "ALL") {
+      params.delete("tab");
+    } else {
+      params.set("tab", tabId);
+    }
+    router.replace(`/portal/requests?${params.toString()}`);
+  };
+
+
 
   const loadData = useCallback(async () => {
     try {
@@ -79,15 +88,11 @@ export default function RequestsPage() {
   }, []);
 
   useEffect(() => {
-    // Check if open modal is requested via URL query params
-    if (searchParams.get("create") === "true") {
-      setTimeout(() => setShowModal(true), 0);
-    }
     const timer = setTimeout(() => {
       loadData();
     }, 0);
     return () => clearTimeout(timer);
-  }, [searchParams, loadData]);
+  }, [loadData]);
 
   // Filter requests during render to avoid useEffect state triggers
   const filteredRequests = requests.filter((r) => {
@@ -108,64 +113,14 @@ export default function RequestsPage() {
       return r.status === "RAISING_CLAIM" || r.status === "CLAIM_REVIEW";
     } else if (activeTab === "COMPLETED") {
       return r.status === "COMPLETED";
+    } else if (activeTab === "PENDING") {
+      return r.status !== "RFQ" && r.status !== "RAISING_CLAIM" && r.status !== "CLAIM_REVIEW" && r.status !== "COMPLETED";
     }
 
     return true;
   });
 
-  const handleCreateRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setFormErrors("");
 
-    // Validate with Zod
-    const validationResult = serviceRequestSchema.safeParse({
-      beneficiaryName,
-      beneficiaryNationalId,
-      description,
-      charityContributionPercentage: charityPercentage,
-      beneficiaryContributionValue: beneficiaryValue,
-    });
-
-    if (!validationResult.success) {
-      setFormErrors(validationResult.error.issues[0].message);
-      setSubmitting(false);
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(validationResult.data),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "فشل إنشاء الطلب");
-      }
-
-      toast.success("تم إنشاء طلب الخدمة بنجاح وطرحه للتسعير!");
-      setShowModal(false);
-      resetForm();
-      loadData();
-    } catch (err) {
-      const error = err as Error;
-      setFormErrors(error.message || "حدث خطأ غير متوقع");
-      toast.error(error.message || "فشل إنشاء الطلب");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const resetForm = () => {
-    setBeneficiaryName("");
-    setBeneficiaryNationalId("");
-    setDescription("");
-    setCharityPercentage(100);
-    setBeneficiaryValue(0);
-    setFormErrors("");
-  };
 
   const getStatusLabelAndStyle = (status: string) => {
     switch (status) {
@@ -197,15 +152,7 @@ export default function RequestsPage() {
           <p className="text-xs text-emerald-600/80 dark:text-emerald-400 mt-1">متابعة كافة طلبات عروض الأسعار والمطالبات المالية</p>
         </div>
 
-        {(userRole === "CHARITY_STAFF" || userRole === "SUPER_ADMIN") && (
-          <button
-            onClick={() => setShowModal(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-600 hover:to-teal-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/10 transition"
-          >
-            <Plus size={18} />
-            <span>طلب خدمة جديد</span>
-          </button>
-        )}
+
       </div>
 
       {/* Tabs and Search Grid */}
@@ -217,10 +164,11 @@ export default function RequestsPage() {
             { id: "RFQ", label: "طلب عروض الأسعار (RFQ)" },
             { id: "CLAIMS", label: "المطالبات المالية" },
             { id: "COMPLETED", label: "الطلبات المكتملة" },
+            { id: "PENDING", label: "الطلبات الأخرى المعلقة" },
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
                 activeTab === tab.id
                   ? "bg-[#064e3b] text-white shadow-sm"
@@ -326,127 +274,7 @@ export default function RequestsPage() {
         </div>
       )}
 
-      {/* Modal Backdrop & Sliding Form */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-3xl p-6 shadow-2xl border border-emerald-500/15 max-h-[90vh] overflow-y-auto no-scrollbar animate-scale-in">
-            <div className="flex items-center justify-between border-b border-emerald-50 dark:border-emerald-950 pb-4">
-              <div className="flex items-center gap-2">
-                <FileText className="text-emerald-600 h-5 w-5" />
-                <h2 className="text-lg font-bold text-emerald-950 dark:text-white">تقديم طلب خدمة جديد</h2>
-              </div>
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  resetForm();
-                  router.push("/portal/requests"); // clear query params
-                }}
-                className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 transition"
-              >
-                <X size={20} />
-              </button>
-            </div>
 
-            {formErrors && (
-              <div className="my-4 rounded-xl bg-rose-500/10 border border-rose-500/20 p-4 text-xs text-rose-300 text-center font-medium">
-                {formErrors}
-              </div>
-            )}
-
-            <form onSubmit={handleCreateRequest} className="space-y-4 pt-4">
-              <div className="input-group">
-                <label>اسم المستفيد ثلاثي</label>
-                <input
-                  type="text"
-                  placeholder="محمد أحمد عسيري"
-                  value={beneficiaryName}
-                  onChange={(e) => setBeneficiaryName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="input-group">
-                <label>رقم الهوية الوطنية للمستفيد</label>
-                <input
-                  type="text"
-                  maxLength={10}
-                  placeholder="10XXXXXXXX"
-                  value={beneficiaryNationalId}
-                  onChange={(e) => setBeneficiaryNationalId(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="input-group">
-                <label>تفاصيل ووصف الخدمة المطلوبة</label>
-                <textarea
-                  rows={3}
-                  placeholder="تفاصيل التقرير الطبي أو الأجهزة التعويضية أو مستلزمات الخدمة المطلوبة..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* Ratios split */}
-              <div className="border border-emerald-500/10 rounded-2xl p-4 bg-emerald-500/5 grid grid-cols-2 gap-4">
-                <div className="col-span-2 flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
-                  <Calculator size={14} strokeWidth={2.5} />
-                  <span>توزيع مساهمات سداد تكاليف الخدمة</span>
-                </div>
-                
-                <div className="input-group">
-                  <label>نسبة مساهمة الجمعية (%)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={charityPercentage}
-                    onChange={(e) => setCharityPercentage(parseInt(e.target.value) || 0)}
-                    required
-                  />
-                </div>
-
-                <div className="input-group">
-                  <label>قيمة مساهمة المستفيد (ر.س)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={beneficiaryValue}
-                    onChange={(e) => setBeneficiaryValue(parseFloat(e.target.value) || 0)}
-                    required
-                  />
-                </div>
-                
-                <p className="col-span-2 text-[10px] text-slate-500 leading-normal">
-                  ملاحظة: سيتم تطبيق هذا التوزيع تلقائياً بعد تلقي عروض أسعار الجهات الخدمية وتثبيت تكلفة الخدمة الإجمالية.
-                </p>
-              </div>
-
-              <div className="pt-2 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    resetForm();
-                    router.push("/portal/requests"); // clear query params
-                  }}
-                  className="rounded-xl px-5 py-3 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-900 transition"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="rounded-xl py-3 px-6 text-xs font-bold text-white gradient-btn disabled:opacity-50"
-                >
-                  {submitting ? "جاري الإرسال..." : "إرسال وتعميم الطلب"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
