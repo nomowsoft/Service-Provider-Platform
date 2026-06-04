@@ -25,18 +25,25 @@ model User {
 }
 
 model Charity {
-  id         Int              @id @default(autoincrement())
-  name       String
-  code       String           @unique
-  email      String?
-  phone      String?
-  token      String?          @unique
-  providerId Int?
-  provider   ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
-  requests   ServiceRequest[]
-  users      User[]
+  id            Int              @id @default(autoincrement())
+  name          String
+  code          String           @unique
+  email         String?
+  phone         String?
+  token         String?          @unique
+  providerId    Int?
+  provider      ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  status        String           @default("DRAFT")
+  domain        String?
+  pendingName   String?
+  pendingEmail  String?
+  pendingPhone  String?
+  pendingDomain String?
+  connectedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  requests      ServiceRequest[]
+  users         User[]
 }
 
 model ServiceProvider {
@@ -45,6 +52,7 @@ model ServiceProvider {
   code      String           @unique
   email     String?
   phone     String?
+  apiCode   String?          @unique
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   offers    PriceOffer[]

@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import prisma from "@/lib/db";
 import { signSession, setSessionCookie } from "@/lib/auth";
 import { registerSchema } from "@/lib/zodSchemas";
+import crypto from "crypto";
 
 export async function POST(request: Request) {
   try {
@@ -72,6 +73,7 @@ export async function POST(request: Request) {
           code: nextCode,
           email: email,
           phone: phone || null,
+          apiCode: `code_${crypto.randomBytes(24).toString("hex")}`,
         },
       });
 

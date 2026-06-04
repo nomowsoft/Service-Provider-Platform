@@ -38,6 +38,7 @@ interface UserType {
     description: string;
     phone: string;
     category: string;
+    apiCode?: string;
   } | null;
 }
 
@@ -62,6 +63,8 @@ export default function SettingsPage() {
   const [charityErrorField, setCharityErrorField] = useState("");
   const [charitySortField, setCharitySortField] = useState<"code" | "name" | null>(null);
   const [charitySortDirection, setCharitySortDirection] = useState<"asc" | "desc">("asc");
+  const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
+  const [approvingId, setApprovingId] = useState<number | null>(null);
 
   // API Config (Mock keys for beautiful visual UX)
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -269,6 +272,25 @@ export default function SettingsPage() {
     }
   };
 
+  const handleApproveRequest = async (id: number) => {
+    setApprovingId(id);
+    try {
+      const res = await fetch(`/api/providers/charity-tokens/${id}/approve`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "فشل تأكيد طلب الارتباط");
+      toast.success("تم تأكيد الارتباط بنجاح وإشعار الجمعية!");
+      setSelectedRequest(null);
+      fetchCharities();
+    } catch (error) {
+      const err = error as Error;
+      toast.error(err.message || "حدث خطأ أثناء تأكيد الارتباط");
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedKey(id);
@@ -295,7 +317,7 @@ export default function SettingsPage() {
   const mockSecretKey = user
     ? (user.role === "CHARITY_STAFF"
       ? `sec_charity_live_3d21f8a7${user.charity?.id || 1}ee55`
-      : `sec_provider_live_9b4e1a2f${user.provider?.id || 1}dd44`)
+      : (user.provider?.apiCode || `code_9b4e1a2f${user.provider?.id || 1}dd44`))
     : "";
 
   const sortedCharities = [...charities].sort((a, b) => {
@@ -506,7 +528,7 @@ export default function SettingsPage() {
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-emerald-950 dark:text-white flex items-center gap-1.5">
                       <Lock size={12} className="text-rose-500" />
-                      المفتاح السري للربط (Secret API Key)
+                      {user?.role === "SERVICE_PROVIDER" ? "كود الربط لمزود الخدمة (apiCode)" : "المفتاح السري للربط (Secret API Key)"}
                     </label>
                     <div className="flex items-center gap-2 bg-slate-50 dark:bg-emerald-950/20 border border-slate-200 dark:border-emerald-950 rounded-xl px-4 py-3">
                       <code className="text-xs font-mono flex-1 text-slate-700 dark:text-slate-300 overflow-x-auto select-all">{mockSecretKey}</code>
@@ -517,7 +539,9 @@ export default function SettingsPage() {
                         {copiedKey === "sec_key" ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
                       </button>
                     </div>
-                    <span className="text-[10px] text-rose-500 font-bold block">تحذير: لا تشارك المفتاح السري أبداً ولا تضعه في أكواد الواجهة الأمامية!</span>
+                    <span className="text-[10px] text-rose-500 font-bold block">
+                      {user?.role === "SERVICE_PROVIDER" ? "تحذير: لا تشارك كود الربط أبداً ولا تضعه في أكواد الواجهة الأمامية!" : "تحذير: لا تشارك المفتاح السري أبداً ولا تضعه في أكواد الواجهة الأمامية!"}
+                    </span>
                   </div>
 
                   {/* Webhook Endpoint */}
@@ -664,6 +688,7 @@ export default function SettingsPage() {
                             </div>
                           </th>
                           <th className="p-4">توكن الربط</th>
+                          <th className="p-4">حالة الارتباط</th>
                           <th className="p-4">تاريخ الربط</th>
                           <th className="p-4 text-center">الإجراءات</th>
                         </tr>
@@ -671,7 +696,7 @@ export default function SettingsPage() {
                       <tbody>
                         {sortedCharities.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="p-8 text-center text-slate-400 font-medium">
+                            <td colSpan={6} className="p-8 text-center text-slate-400 font-medium">
                               لا توجد جمعيات مرتبطة حالياً. اضغط على "ربط جمعية جديدة" للبدء.
                             </td>
                           </tr>
@@ -692,22 +717,54 @@ export default function SettingsPage() {
                                   </button>
                                 </div>
                               </td>
+                              <td className="p-4">
+                                {item.status === "DRAFT" && (
+                                  <span className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                                    مسودة
+                                  </span>
+                                )}
+                                {item.status === "REQUESTED" && (
+                                  <span className="bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 px-2.5 py-1 rounded-full text-[10px] font-bold animate-pulse">
+                                    طلب ارتباط
+                                  </span>
+                                )}
+                                {item.status === "CONNECTED" && (
+                                  <span className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                                    نشط
+                                  </span>
+                                )}
+                              </td>
                               <td className="p-4 text-slate-400 text-[10px]">
-                                {new Date(item.createdAt).toLocaleDateString("ar-SA", {
-                                  year: "numeric",
-                                  month: "long",
-                                  day: "numeric"
-                                })}
+                                {item.connectedAt ? (
+                                  new Date(item.connectedAt).toLocaleDateString("ar-SA", {
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric"
+                                  })
+                                ) : (
+                                  <span className="text-slate-300 dark:text-slate-600">—</span>
+                                )}
                               </td>
                               <td className="p-4 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteCharity(item.id)}
-                                  className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 p-2 rounded-lg transition inline-flex items-center justify-center"
-                                  title="حذف الربط"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
+                                <div className="flex items-center justify-center gap-2">
+                                  {item.status === "REQUESTED" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedRequest(item)}
+                                      className="bg-emerald-950 hover:bg-emerald-900 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition flex items-center gap-1"
+                                    >
+                                      عرض طلب الارتباط
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCharity(item.id)}
+                                    className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 p-2 rounded-lg transition inline-flex items-center justify-center"
+                                    title="حذف الربط"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))
@@ -723,6 +780,77 @@ export default function SettingsPage() {
         </div>
 
       </div>
+
+      {selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" dir="rtl">
+          <div className="bg-white dark:bg-[#021f18] border border-slate-100 dark:border-emerald-900/60 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-emerald-950/60 flex items-center justify-between">
+              <h3 className="text-base font-extrabold text-emerald-950 dark:text-white">تفاصيل طلب الارتباط</h3>
+              <button 
+                onClick={() => setSelectedRequest(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-xs text-amber-800 dark:text-amber-300 font-medium">
+                    وصلك طلب ارتباط من الجمعية التالية. يرجى مراجعة البيانات وتأكيد الموافقة لإتمام عملية الربط بشكل رسمي.
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">اسم الجمعية (المرسل)</label>
+                  <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200">
+                    {selectedRequest.pendingName || selectedRequest.name}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">البريد الإلكتروني</label>
+                  <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200">
+                    {selectedRequest.pendingEmail || "لا يوجد"}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">رقم الهاتف</label>
+                  <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
+                    {selectedRequest.pendingPhone || "لا يوجد"}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">الدومين (domain)</label>
+                  <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
+                    {selectedRequest.pendingDomain || "لا يوجد"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 bg-slate-50 dark:bg-[#03251c]/20 border-t border-slate-100 dark:border-emerald-950/60 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedRequest(null)}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-100 dark:border-emerald-950/60 dark:hover:bg-emerald-950/20 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                disabled={approvingId === selectedRequest.id}
+                onClick={() => handleApproveRequest(selectedRequest.id)}
+                className="bg-emerald-950 hover:bg-emerald-900 text-white rounded-xl px-5 py-2 text-xs font-bold transition flex items-center gap-1.5"
+              >
+                {approvingId === selectedRequest.id ? "جاري الموافقة..." : "موافقة وتأكيد الربط"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
