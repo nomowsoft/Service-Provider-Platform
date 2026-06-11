@@ -67,7 +67,6 @@ export default function RequestsPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      // Fetch user role
       const userRes = await fetch("/api/auth/me");
       if (userRes.ok) {
         const userData = await userRes.json();
@@ -80,7 +79,6 @@ export default function RequestsPage() {
       const data = await res.json();
       setRequests(data.requests);
     } catch (error) {
-      console.error(error);
       toast.error("خطأ أثناء تحميل قائمة الطلبات");
     } finally {
       setLoading(false);

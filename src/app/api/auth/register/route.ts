@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 import prisma from "@/lib/db";
 import { signSession, setSessionCookie } from "@/lib/auth";
-import { registerSchema } from "@/lib/zodSchemas";
+import { registerSchema } from "@/utils/validation";
 import crypto from "crypto";
 
 export async function POST(request: Request) {
@@ -21,12 +21,12 @@ export async function POST(request: Request) {
     const { name, email, password, role, entityName, phone } = validation.data;
 
     // Reject registration if role is not SERVICE_PROVIDER
-    if (role !== "SERVICE_PROVIDER") {
-      return NextResponse.json(
-        { message: "غير مسموح بإنشاء هذا النوع من الحسابات حالياً" },
-        { status: 400 }
-      );
-    }
+    // if (role !== "SERVICE_PROVIDER") {
+    //   return NextResponse.json(
+    //     { message: "غير مسموح بإنشاء هذا النوع من الحسابات حالياً" },
+    //     { status: 400 }
+    //   );
+    // }
 
     // 1. Check if email already exists
     const existingUser = await prisma.user.findUnique({
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 14);
 
     // 3. Create provider and user in a transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -114,7 +114,8 @@ export async function POST(request: Request) {
         provider: result.provider,
       },
       token,
-    });
+      message:"تم تسجيل الحساب بنجاح"
+    }, { status: 200 });
   } catch (error) {
     console.error("Register API Error:", error);
     return NextResponse.json(

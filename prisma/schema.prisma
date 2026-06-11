@@ -42,7 +42,6 @@ model Charity {
   connectedAt   DateTime?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
-  requests      ServiceRequest[]
   users         User[]
 }
 
@@ -55,47 +54,8 @@ model ServiceProvider {
   apiCode   String?          @unique
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
-  offers    PriceOffer[]
   users     User[]
-  requests  ServiceRequest[] // assigned requests (once provider is selected)
   charities Charity[]
 }
 
-model ServiceRequest {
-  id                            Int              @id @default(autoincrement())
-  name                          String           @unique // e.g. "SR-2026-0001"
-  beneficiaryName               String
-  beneficiaryNationalId          String
-  charityId                     Int
-  charity                       Charity          @relation(fields: [charityId], references: [id], onDelete: Cascade)
-  serviceProviderId             Int?
-  serviceProvider               ServiceProvider? @relation(fields: [serviceProviderId], references: [id], onDelete: SetNull)
-  dateRequest                   DateTime         @default(now())
-  status                        String           // "DRAFT", "RFQ", "BENEFICIARY_CONTRIBUTION", "RAISING_CLAIM", "CLAIM_REVIEW", "COMPLETED", "CANCELLED"
-  serviceCost                   Float            @default(0)
-  charityContributionPercentage Float            @default(100)
-  charityContributionValue      Float            @default(0)
-  beneficiaryContributionValue  Float            @default(0)
-  claimType                     String?          // "full_claim", "partial_claim"
-  claimState                    String?          // "claim_done", "claim_review"
-  isRaisingClaim                Boolean          @default(false)
-  description                   String?
-  createdAt                     DateTime         @default(now())
-  updatedAt                     DateTime         @updatedAt
-  priceOffers                   PriceOffer[]
-}
 
-model PriceOffer {
-  id             Int             @id @default(autoincrement())
-  requestId      Int
-  request        ServiceRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  providerId     Int
-  provider       ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  amountTotal    Float
-  status         String          // "DRAFT", "SENT", "APPROVED", "REJECTED"
-  notes          String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-
-  @@unique([requestId, providerId])
-}

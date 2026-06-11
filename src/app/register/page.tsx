@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { registerSchema } from "@/lib/zodSchemas";
+import { registerSchema } from "@/utils/validation";
 import toast from "react-hot-toast";
-import { User, Mail, Lock, Building, Phone, Eye, EyeOff } from "lucide-react";
+import { User, Mail, Building, Phone, Eye, EyeOff } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();

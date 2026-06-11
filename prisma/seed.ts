@@ -7,8 +7,6 @@ async function main() {
   console.log("Seeding started...");
 
   // Clean up database
-  await prisma.priceOffer.deleteMany({});
-  await prisma.serviceRequest.deleteMany({});
   await prisma.user.deleteMany({});
   await prisma.charity.deleteMany({});
   await prisma.serviceProvider.deleteMany({});

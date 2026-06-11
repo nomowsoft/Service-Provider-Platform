@@ -23,9 +23,10 @@ export async function DELETE(
       return NextResponse.json({ message: "معرف غير صحيح" }, { status: 400 });
     }
 
-    // Verify charity exists and belongs to this service provider
+    // Verify charity exists and belongs to this service provider (selective projection)
     const charity = await prisma.charity.findUnique({
       where: { id: charityId },
+      select: { providerId: true },
     });
 
     if (!charity) {
@@ -43,7 +44,10 @@ export async function DELETE(
       where: { id: charityId },
     });
 
-    return NextResponse.json({ message: "تم حذف الجمعية بنجاح" });
+    return NextResponse.json(
+      { message: "تم حذف الجمعية بنجاح" },
+      { status: 200 }
+    );
   } catch (error) {
     console.error("Delete Provider Charity Error:", error);
     return NextResponse.json(

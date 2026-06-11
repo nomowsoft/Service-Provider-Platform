@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 import prisma from "@/lib/db";
 import { signSession, setSessionCookie } from "@/lib/auth";
-import { loginSchema } from "@/lib/zodSchemas";
+import { loginSchema } from "@/utils/validation";
 
 export async function POST(request: Request) {
   try {
@@ -69,7 +69,8 @@ export async function POST(request: Request) {
         provider: user.provider,
       },
       token,
-    });
+      message:"تم تسجيل الدخول بنجاح"
+    },{ status: 200 });
   } catch (error) {
     console.error("Login API Error:", error);
     return NextResponse.json(

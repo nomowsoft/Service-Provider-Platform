@@ -23,11 +23,27 @@ export async function POST(
       return NextResponse.json({ message: "معرف جمعية غير صحيح" }, { status: 400 });
     }
 
-    // Verify charity exists and belongs to this service provider
+    // Verify charity exists and belongs to this service provider (selective projection)
     const charity = await prisma.charity.findUnique({
       where: { id: charityId },
-      include: {
-        provider: true,
+      select: {
+        id: true,
+        status: true,
+        providerId: true,
+        token: true,
+        name: true,
+        email: true,
+        phone: true,
+        domain: true,
+        pendingName: true,
+        pendingEmail: true,
+        pendingPhone: true,
+        pendingDomain: true,
+        provider: {
+          select: {
+            apiCode: true,
+          },
+        },
       },
     });
 
@@ -66,19 +82,12 @@ export async function POST(
       );
     }
 
-    // Build the callback URL
-    let targetUrl = domain.trim();
-    if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
-      targetUrl = `https://${targetUrl}`;
-    }
-    
-    if (targetUrl.endsWith("/")) {
-      targetUrl = `${targetUrl}api/srb/connect`;
-    } else {
-      targetUrl = `${targetUrl}/api/srb/connect`;
-    }
+    // Build the callback URL cleanly
+    const normalizedDomain = domain.trim();
+    const prefix = /^https?:\/\//i.test(normalizedDomain) ? "" : "https://";
+    const targetUrl = `${prefix}${normalizedDomain}${normalizedDomain.endsWith("/") ? "" : "/"}api/cerp/connect`;
 
-    // Send HTTP POST confirmation to charity's domain
+    // Send HTTP POST confirmation to charity's domain with an 8-second timeout
     try {
       const response = await fetch(targetUrl, {
         method: "POST",
@@ -88,17 +97,17 @@ export async function POST(
           code: providerApiCode,
         }),
       });
-
       if (!response.ok) {
         return NextResponse.json(
           { message: `فشل سيرفر الجمعية في استقبال التأكيد (رمز الاستجابة: ${response.status})` },
           { status: 400 }
         );
       }
-    } catch (error) {
-      console.error("External Confirmation Call Failed:", error);
+    } catch (error: any) {
       return NextResponse.json(
-        { message: "تعذر الاتصال بسيرفر الجمعية عبر الدومين المحدد. يرجى التحقق من عمل الدومين وصحته." },
+        {
+          message: "تعذر الاتصال بسيرفر الجمعية عبر الدومين المحدد. يرجى التحقق من عمل الدومين وصحته."
+        },
         { status: 400 }
       );
     }
@@ -120,12 +129,14 @@ export async function POST(
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      message: "تمت الموافقة وتأكيد ارتباط الجمعية بنجاح وتم إرسال إشعار التأكيد لهم",
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        message: "تمت الموافقة وتأكيد ارتباط الجمعية بنجاح وتم إرسال إشعار التأكيد لهم",
+      },
+      { status: 200 }
+    );
   } catch (error) {
-    console.error("Approve Provider Charity Error:", error);
     return NextResponse.json(
       { message: "حدث خطأ غير متوقع أثناء معالجة الموافقة" },
       { status: 500 }

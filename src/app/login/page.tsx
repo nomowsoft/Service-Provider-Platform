@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { loginSchema } from "@/lib/zodSchemas";
+import { loginSchema } from "@/utils/validation";
 import toast from "react-hot-toast";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -39,7 +39,10 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "حدث خطأ أثناء تسجيل الدخول");
+        toast.error(data.message || "فشل تسجيل الدخول");
+        setError(data.message || "فشل تسجيل الدخول");
+        setLoading(false);
+        return;
       }
 
       toast.success(`أهلاً بك، تم تسجيل الدخول بنجاح!`);
@@ -53,19 +56,6 @@ export default function LoginPage() {
       toast.error(error.message || "فشل تسجيل الدخول");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fillCredentials = (type: "admin" | "charity" | "provider") => {
-    if (type === "admin") {
-      setEmail("admin@central.gov.sa");
-      setPassword("password123");
-    } else if (type === "charity") {
-      setEmail("charity1@bisha.org.sa");
-      setPassword("password123");
-    } else if (type === "provider") {
-      setEmail("provider1@medical.com");
-      setPassword("password123");
     }
   };
 
@@ -164,42 +154,12 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-4 text-center">
-            <span className="text-xs text-emerald-400 font-medium">
+            <span className="text-xs text-emerald-700 font-medium">
               ليس لديك حساب؟{" "}
-              <Link href="/register" className="font-bold text-white hover:text-emerald-300 underline transition-all">
+              <Link href="/register" className="font-bold text-white hover:text-emerald-900 underline transition-all">
                 سجل حساباً جديداً الآن
               </Link>
             </span>
-          </div>
-
-          {/* Quick Mock Login Accounts */}
-          <div className="mt-8 pt-6 border-t border-emerald-500/10">
-            <span className="text-xs text-emerald-400 font-bold block mb-3 text-center">
-              بيانات الدخول السريع للتجربة
-            </span>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => fillCredentials("admin")}
-                className="px-2 py-2 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/10 text-emerald-300 text-xs font-semibold transition"
-              >
-                المدير العام
-              </button>
-              <button
-                type="button"
-                onClick={() => fillCredentials("charity")}
-                className="px-2 py-2 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/10 text-emerald-300 text-xs font-semibold transition"
-              >
-                ممثل جمعية
-              </button>
-              <button
-                type="button"
-                onClick={() => fillCredentials("provider")}
-                className="px-2 py-2 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/10 text-emerald-300 text-xs font-semibold transition"
-              >
-                مزود خدمة
-              </button>
-            </div>
           </div>
         </div>
       </div>

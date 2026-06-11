@@ -42,7 +42,8 @@ export async function GET() {
         charity: user.charity,
         provider: provider,
       },
-    });
+      message:"تم تسجيل الدخول بنجاح"
+    }, { status: 200 });
   } catch (error) {
     console.error("Auth Me API Error:", error);
     return NextResponse.json(
