@@ -30,6 +30,7 @@ interface PriceOffer {
     id: number;
     name: string;
     code: string;
+    apiCode?: string;
   };
 }
 
@@ -46,10 +47,15 @@ interface RequestDetail {
   description: string;
   createdAt: string;
   charityId: number;
-  charity: { name: string };
+  charity: { 
+    name: string;
+    token?: string;
+  };
   serviceProviderId: number | null;
   serviceProvider?: { name: string } | null;
   priceOffers: PriceOffer[];
+  agreedProducts?: any[];
+  offerLines?: { id: number; name: string; price_total: number; price_unit: number; product_id: number; product_qty: number }[];
 }
 
 interface SessionUser {
@@ -60,10 +66,12 @@ interface SessionUser {
   charity?: {
     id: number;
     name: string;
+    token?: string;
   } | null;
   provider?: {
     id: number;
     name: string;
+    apiCode?: string;
   } | null;
 }
 
@@ -76,8 +84,10 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   const [session, setSession] = useState<SessionUser | null>(null);
 
   // Form states: Price Offer
-  const [offerPrice, setOfferPrice] = useState("");
   const [offerNotes, setOfferNotes] = useState("");
+  const [offerLines, setOfferLines] = useState<{ id: string; productId: number | ""; price: string; productName: string; productCode: string }[]>([
+    { id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "" }
+  ]);
   const [offerSubmitting, setOfferSubmitting] = useState(false);
 
   // Form states: Financial Claim
@@ -113,15 +123,23 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
       const data = await res.json();
       setRequest(data.request);
 
-      // Prepopulate own offer details if any
-      if (sessionData?.user?.role === "SERVICE_PROVIDER") {
-        const myOffer = data.request.priceOffers.find(
-          (o: PriceOffer) => o.provider.id === sessionData?.user?.provider?.id
-        );
-        if (myOffer) {
-          setOfferPrice(myOffer.amountTotal.toString());
-          setOfferNotes(myOffer.notes || "");
-        }
+      // Prepopulate with existing offer lines from Odoo
+      if (sessionData?.user?.role === "SERVICE_PROVIDER" && data.request.offerLines && data.request.offerLines.length > 0) {
+        const agreedProds = data.request.agreedProducts || [];
+        setOfferLines(data.request.offerLines.map((l: any) => {
+          const matchedProd = agreedProds.find((p: any) => p.product_id === l.product_id);
+          return {
+            id: Date.now().toString() + Math.random().toString(),
+            productId: l.product_id,
+            price: l.price_unit.toString(),
+            productName: l.name || matchedProd?.provider_product_name || "",
+            productCode: matchedProd?.provider_product_code || "",
+          };
+        }));
+        setOfferNotes(data.request.offerNotes || "");
+      } else if (sessionData?.user?.role === "SERVICE_PROVIDER") {
+        // No existing lines, start with empty form
+        setOfferLines([{ id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "" }]);
       }
     } catch (error) {
       console.error(error);
@@ -143,18 +161,26 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
     e.preventDefault();
     setOfferSubmitting(true);
 
-    const price = parseFloat(offerPrice);
-    if (isNaN(price) || price <= 0) {
-      toast.error("يرجى إدخال سعر عرض صحيح أكبر من 0");
+    const validLines = offerLines.filter(l => l.productId !== "" && parseFloat(l.price) > 0);
+    if (validLines.length === 0) {
+      toast.error("يرجى إدخال منتج واحد وسعر صحيح على الأقل");
       setOfferSubmitting(false);
       return;
     }
 
     try {
-      const res = await fetch(`/api/requests/${id}/offers`, {
+      const formattedLines = validLines.map(l => ({
+        productId: Number(l.productId),
+        price: parseFloat(l.price)
+      }));
+
+      const res = await fetch(`/api/requests/${id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ price, notes: offerNotes }),
+        body: JSON.stringify({ 
+          lines: formattedLines, 
+          notes: offerNotes
+        }),
       });
 
       const data = await res.json();
@@ -174,18 +200,58 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   const handleApproveOffer = async (offerId: number) => {
     if (!confirm("هل أنت متأكد من رغبتك في الموافقة على عرض السعر هذا وترسية الطلب عليه؟")) return;
     
+    if (!request) return;
+    const selectedOffer = request.priceOffers.find((o) => o.id === offerId);
+    if (!selectedOffer) {
+      toast.error("عرض السعر غير موجود");
+      return;
+    }
+
+    const code = selectedOffer.provider?.apiCode || "";
+    const token = session?.charity?.token || request.charity?.token || "";
+
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/offers/${offerId}`, {
+      // 1. Approve offer on external ERP API
+      const resOffer = await fetch(`/api/offers/${offerId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "approve" }),
+        body: JSON.stringify({ 
+          action: "approve",
+          code,
+          token,
+        }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "فشل الموافقة على عرض السعر");
+      const dataOffer = await resOffer.json();
+      if (!resOffer.ok) throw new Error(dataOffer.message || "فشل الموافقة على عرض السعر في النظام الخارجي");
 
-      toast.success(data.message || "تم اعتماد عرض السعر بنجاح وترسية الخدمة!");
+      // 2. Calculate contributions
+      const offerAmount = selectedOffer.amountTotal;
+      const initialBeneficiary = request.beneficiaryContributionValue || 0;
+      const charityPercentage = request.charityContributionPercentage || 100;
+
+      const remaining = Math.max(0, offerAmount - initialBeneficiary);
+      const charityVal = remaining * (charityPercentage / 100);
+      const finalBeneficiaryVal = initialBeneficiary + (remaining - charityVal);
+
+      // 3. Update the local request status and values in our database
+      const resRequest = await fetch(`/api/requests/${request.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "RAISING_CLAIM",
+          serviceCost: offerAmount,
+          charityContributionValue: charityVal,
+          beneficiaryContributionValue: finalBeneficiaryVal,
+          serviceProviderId: selectedOffer.provider.id,
+        }),
+      });
+
+      const dataRequest = await resRequest.json();
+      if (!resRequest.ok) throw new Error(dataRequest.message || "فشل تحديث حالة الطلب في قاعدة البيانات");
+
+      toast.success("تم اعتماد عرض السعر بنجاح وترسية الخدمة!");
       loadRequestAndUser();
     } catch (error) {
       const err = error as Error;
@@ -410,27 +476,172 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                   <span>يمكنك تقديم سعر عرض لهذه الخدمة الطبية كشريك مسجل. يرجى إدخال التكلفة الإجمالية بدقة.</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="input-group">
-                    <label>عرض السعر الإجمالي (ر.س)</label>
-                    <input
-                      type="number"
-                      min={1}
-                      placeholder="5000"
-                      value={offerPrice}
-                      onChange={(e) => setOfferPrice(e.target.value)}
-                      required
-                    />
+                <div className="space-y-4 border border-emerald-100 dark:border-emerald-900/50 rounded-2xl p-4 bg-emerald-50/30 dark:bg-emerald-950/20">
+                  <div className="flex items-center justify-between border-b border-emerald-100 dark:border-emerald-900/50 pb-2">
+                    <span className="text-sm font-bold text-emerald-900 dark:text-emerald-100">المنتجات / الخدمات (البنود)</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const maxProducts = request.agreedProducts?.length || 0;
+                        if (offerLines.length >= maxProducts) {
+                          toast.error("لقد قمت بإضافة جميع المنتجات المتاحة في هذا الطلب");
+                          return;
+                        }
+                        setOfferLines([...offerLines, { id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "" }]);
+                      }}
+                      className="text-xs bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-lg hover:bg-emerald-200 transition-colors"
+                    >
+                      + إضافة بند
+                    </button>
                   </div>
-                  <div className="input-group">
-                    <label>ملاحظات إضافية (اختياري)</label>
-                    <input
-                      type="text"
-                      placeholder="فترة التشغيل، التفاصيل، إلخ..."
-                      value={offerNotes}
-                      onChange={(e) => setOfferNotes(e.target.value)}
-                    />
+
+                  {offerLines.map((line, index) => {
+                    const matchedProduct = request.agreedProducts?.find((p: any) => p.product_id === line.productId);
+                    return (
+                    <div key={line.id} className="bg-white dark:bg-[#03251c] p-4 rounded-xl shadow-sm border border-emerald-50 dark:border-emerald-900/30 space-y-3">
+                      {/* Row 1: Product selector */}
+                      {request.agreedProducts && request.agreedProducts.length > 0 && (
+                        <div className="input-group">
+                          <label className="text-[10px]">المنتج / الخدمة</label>
+                          <select 
+                            value={line.productId}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const numVal = val ? Number(val) : "";
+                              const newLines = [...offerLines];
+                              newLines[index].productId = numVal;
+                              
+                              if (numVal) {
+                                const prod = request.agreedProducts?.find((p: any) => p.product_id === numVal);
+                                // Look up the product name from existing offerLines data (Odoo line name)
+                                const existingLine = request.offerLines?.find((ol: any) => ol.product_id === numVal);
+                                if (prod) {
+                                  newLines[index].price = prod.cost_price.toString();
+                                  newLines[index].productName = existingLine?.name || prod.provider_product_name || "";
+                                  newLines[index].productCode = prod.provider_product_code || "";
+                                }
+                              } else {
+                                newLines[index].price = "";
+                                newLines[index].productName = "";
+                                newLines[index].productCode = "";
+                              }
+                              setOfferLines(newLines);
+                            }}
+                            required
+                            className="w-full text-xs"
+                          >
+                            <option value="">-- اختر المنتج --</option>
+                            {request.agreedProducts.map((p: any) => {
+                              const isSelectedElsewhere = offerLines.some(l => l.id !== line.id && l.productId === p.product_id);
+                              // Get product name from existing Odoo lines first, then provider_product_name
+                              const lineForProduct = request.offerLines?.find((ol: any) => ol.product_id === p.product_id);
+                              const displayName = lineForProduct?.name || p.provider_product_name || `منتج ${p.product_id}`;
+                              return (
+                                <option 
+                                  key={p.product_id} 
+                                  value={p.product_id}
+                                  disabled={isSelectedElsewhere}
+                                >
+                                  {displayName} (التكلفة: {p.cost_price})
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Row 2: Product Name, Product Code, Price */}
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        <div className="input-group md:col-span-4">
+                          <label className="text-[10px]">اسم المنتج</label>
+                          <input
+                            type="text"
+                            value={line.productName}
+                            onChange={(e) => {
+                              const newLines = [...offerLines];
+                              newLines[index].productName = e.target.value;
+                              setOfferLines(newLines);
+                            }}
+                            placeholder="اسم المنتج"
+                            className="w-full text-xs"
+                            readOnly={!!matchedProduct}
+                          />
+                        </div>
+
+                        <div className="input-group md:col-span-3">
+                          <label className="text-[10px]">كود المنتج</label>
+                          <input
+                            type="text"
+                            value={line.productCode}
+                            onChange={(e) => {
+                              const newLines = [...offerLines];
+                              newLines[index].productCode = e.target.value;
+                              setOfferLines(newLines);
+                            }}
+                            placeholder="كود المنتج"
+                            className="w-full text-xs"
+                            readOnly={!!matchedProduct}
+                          />
+                        </div>
+
+                        <div className="input-group md:col-span-3">
+                          <label className="text-[10px]">السعر (ر.س)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max={
+                              line.productId && request.agreedProducts
+                                ? request.agreedProducts.find((p: any) => p.product_id === line.productId)?.cost_price
+                                : undefined
+                            }
+                            required
+                            value={line.price}
+                            onChange={(e) => {
+                              const newLines = [...offerLines];
+                              newLines[index].price = e.target.value;
+                              setOfferLines(newLines);
+                            }}
+                            placeholder="مثال: 500"
+                            className="w-full text-xs"
+                          />
+                        </div>
+
+                        <div className="md:col-span-2 flex justify-end">
+                          {offerLines.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOfferLines(offerLines.filter(l => l.id !== line.id));
+                              }}
+                              className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-2 rounded-lg transition-colors text-xs"
+                              title="حذف البند"
+                            >
+                              حذف
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    );
+                  })}
+                  
+                  <div className="flex justify-between items-center pt-2 px-2 text-sm">
+                    <span className="font-bold text-slate-600 dark:text-slate-400">الإجمالي:</span>
+                    <span className="font-extrabold text-emerald-700 dark:text-emerald-400">
+                      {offerLines.reduce((acc, curr) => acc + (parseFloat(curr.price) || 0), 0).toFixed(2)} ر.س
+                    </span>
                   </div>
+                </div>
+
+                <div className="input-group mt-4">
+                  <label>ملاحظات إضافية (اختياري)</label>
+                  <input
+                    type="text"
+                    placeholder="فترة التشغيل، التفاصيل، إلخ..."
+                    value={offerNotes}
+                    onChange={(e) => setOfferNotes(e.target.value)}
+                  />
                 </div>
 
                 <button

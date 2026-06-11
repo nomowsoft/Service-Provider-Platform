@@ -24,7 +24,7 @@ export default async function PortalLayout({
   });
 
   if (!user) {
-    redirect("/login");
+    redirect("/login?clear=1");
   }
 
   const userProfile = {

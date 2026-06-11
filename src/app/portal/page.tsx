@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { 
-  FileText, 
-  Clock, 
-  CheckCircle2, 
-  Coins, 
-  Plus, 
+import {
+  FileText,
+  Clock,
+  CheckCircle2,
+  Coins,
   ChevronLeft
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -49,7 +48,7 @@ export default function PortalDashboard() {
 
         const statsRes = await fetch("/api/stats");
         if (!statsRes.ok) throw new Error("فشل تحميل البيانات");
-        
+
         const data = await statsRes.json();
         setStats(data.stats);
         setRecentRequests(data.recentRequests);
@@ -116,7 +115,10 @@ export default function PortalDashboard() {
       {/* Grid of Metric Cards */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: RFQ */}
-        <div className="glass-card hover-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 flex items-center justify-between">
+        <Link
+          href="/portal/requests?tab=RFQ"
+          className="glass-card hover-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 flex items-center justify-between transition-all duration-200 hover:scale-[1.02] cursor-pointer"
+        >
           <div className="space-y-2">
             <span className="text-xs font-bold text-emerald-600/90 dark:text-emerald-400">طلبات عروض الأسعار</span>
             <h3 className="text-3xl font-extrabold text-emerald-950 dark:text-white">{s.rfqCount}</h3>
@@ -129,10 +131,13 @@ export default function PortalDashboard() {
             </svg>
             <FileText className="absolute text-emerald-600 dark:text-emerald-400 h-5 w-5" />
           </div>
-        </div>
+        </Link>
 
         {/* Card 2: Financial Claims */}
-        <div className="glass-card hover-card rounded-3xl p-6 shadow-sm border border-teal-100/50 flex items-center justify-between">
+        <Link
+          href="/portal/requests?tab=CLAIMS"
+          className="glass-card hover-card rounded-3xl p-6 shadow-sm border border-teal-100/50 flex items-center justify-between transition-all duration-200 hover:scale-[1.02] cursor-pointer"
+        >
           <div className="space-y-2">
             <span className="text-xs font-bold text-teal-600/90 dark:text-teal-400">المطالبات المالية</span>
             <h3 className="text-3xl font-extrabold text-emerald-950 dark:text-white">{s.claimCount}</h3>
@@ -145,10 +150,13 @@ export default function PortalDashboard() {
             </svg>
             <Coins className="absolute text-teal-600 dark:text-teal-400 h-5 w-5" />
           </div>
-        </div>
+        </Link>
 
         {/* Card 3: Completed Requests */}
-        <div className="glass-card hover-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 flex items-center justify-between">
+        <Link
+          href="/portal/requests?tab=COMPLETED"
+          className="glass-card hover-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 flex items-center justify-between transition-all duration-200 hover:scale-[1.02] cursor-pointer"
+        >
           <div className="space-y-2">
             <span className="text-xs font-bold text-green-600/90 dark:text-green-400">الطلبات المكتملة</span>
             <h3 className="text-3xl font-extrabold text-emerald-950 dark:text-white">{s.completedCount}</h3>
@@ -161,10 +169,13 @@ export default function PortalDashboard() {
             </svg>
             <CheckCircle2 className="absolute text-green-600 dark:text-green-400 h-5 w-5" />
           </div>
-        </div>
+        </Link>
 
         {/* Card 4: Other Pending Requests */}
-        <div className="glass-card hover-card rounded-3xl p-6 shadow-sm border border-slate-100/50 flex items-center justify-between">
+        <Link
+          href="/portal/requests?tab=PENDING"
+          className="glass-card hover-card rounded-3xl p-6 shadow-sm border border-slate-100/50 flex items-center justify-between transition-all duration-200 hover:scale-[1.02] cursor-pointer"
+        >
           <div className="space-y-2">
             <span className="text-xs font-bold text-slate-600 dark:text-slate-400">الطلبات الأخرى المعلقة</span>
             <h3 className="text-3xl font-extrabold text-emerald-950 dark:text-white">{s.pendingCount}</h3>
@@ -177,7 +188,7 @@ export default function PortalDashboard() {
             </svg>
             <Clock className="absolute text-slate-600 dark:text-slate-400 h-5 w-5" />
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Main Section Grid */}
@@ -189,7 +200,7 @@ export default function PortalDashboard() {
               <h2 className="text-lg font-bold text-emerald-950 dark:text-white">آخر الطلبات والأنشطة</h2>
               <p className="text-xs text-emerald-600/70 dark:text-emerald-400">آخر 5 طلبات تم تحديثها في النظام</p>
             </div>
-            
+
             <div className="flex gap-2">
               <Link
                 href="/portal/requests"
@@ -199,15 +210,6 @@ export default function PortalDashboard() {
                 <ChevronLeft size={14} />
               </Link>
 
-              {(userRole === "CHARITY_STAFF" || userRole === "SUPER_ADMIN") && (
-                <Link
-                  href="/portal/requests?create=true"
-                  className="inline-flex items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-600 hover:to-teal-500 px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-500/10 transition"
-                >
-                  <Plus size={14} />
-                  <span>طلب جديد</span>
-                </Link>
-              )}
             </div>
           </div>
 
@@ -218,30 +220,30 @@ export default function PortalDashboard() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-sm">
+              <table className="w-full text-right text-sm whitespace-nowrap md:whitespace-normal">
                 <thead>
                   <tr className="border-b border-emerald-50 dark:border-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-bold">
-                    <th className="pb-3 pr-2">رقم الطلب</th>
-                    <th className="pb-3">المستفيد</th>
-                    <th className="pb-3">الجمعية الأهلية</th>
-                    <th className="pb-3">مزود الخدمة</th>
-                    <th className="pb-3">الحالة</th>
-                    <th className="pb-3 pl-2 text-left">التكلفة</th>
+                    <th className="pb-3 px-2">رقم الطلب</th>
+                    <th className="pb-3 px-2">المستفيد</th>
+                    <th className="pb-3 px-2">الجمعية الأهلية</th>
+                    <th className="pb-3 px-2">مزود الخدمة</th>
+                    <th className="pb-3 px-2">الحالة</th>
+                    <th className="pb-3 px-2 text-left">التكلفة</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-emerald-50/50 dark:divide-emerald-950/40">
                   {recentRequests.map((req) => (
                     <tr key={req.id} className="hover:bg-emerald-50/20 dark:hover:bg-emerald-900/10 transition-colors">
-                      <td className="py-4 pr-2 font-semibold text-emerald-800 dark:text-emerald-300">
+                      <td className="py-4 px-2 font-semibold text-emerald-800 dark:text-emerald-300">
                         <Link href={`/portal/requests/${req.id}`} className="hover:underline">
                           {req.name}
                         </Link>
                       </td>
-                      <td className="py-4 text-emerald-950 dark:text-white font-medium">{req.beneficiaryName}</td>
-                      <td className="py-4 text-slate-600 dark:text-slate-300 text-xs">{req.charityName}</td>
-                      <td className="py-4 text-slate-600 dark:text-slate-300 text-xs">{req.providerName}</td>
-                      <td className="py-4">{getStatusBadge(req.status)}</td>
-                      <td className="py-4 pl-2 text-left font-bold text-emerald-950 dark:text-emerald-100">
+                      <td className="py-4 px-2 text-emerald-950 dark:text-white font-medium">{req.beneficiaryName}</td>
+                      <td className="py-4 px-2 text-slate-600 dark:text-slate-300 text-xs">{req.charityName}</td>
+                      <td className="py-4 px-2 text-slate-600 dark:text-slate-300 text-xs">{req.providerName}</td>
+                      <td className="py-4 px-2">{getStatusBadge(req.status)}</td>
+                      <td className="py-4 px-2 text-left font-bold text-emerald-950 dark:text-emerald-100">
                         {req.cost > 0 ? `${req.cost.toLocaleString()} ر.س` : "لم تسعر بعد"}
                       </td>
                     </tr>

@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import prisma from "@/lib/db";
+import { priceOfferSchema } from "@/utils/validation";
+import {
+  getCharitiesToSync,
+  fetchOfferDetail,
+  postOfferToOdoo,
+  resolveProvider,
+} from "../odoo";
+
+/* ================================================================== */
+/*  GET /api/requests/:id  — Fetch a single offer detail from Odoo    */
+/* ================================================================== */
 
 export async function GET(
   request: Request,
@@ -12,46 +23,60 @@ export async function GET(
       return NextResponse.json({ message: "غير مصرح" }, { status: 401 });
     }
 
-    const { id: rawId } = await params;
-    const id = parseInt(rawId);
-    if (isNaN(id)) {
+    const { id } = await params;
+    const requestId = parseInt(id);
+    if (isNaN(requestId)) {
       return NextResponse.json({ message: "معرف الطلب غير صالح" }, { status: 400 });
     }
 
-    const serviceRequest = await prisma.serviceRequest.findUnique({
-      where: { id },
-      include: {
-        charity: true,
-        serviceProvider: true,
-        priceOffers: {
-          include: {
-            provider: true,
-          },
-          orderBy: { createdAt: "desc" }
-        },
-      },
-    });
+    const charities = await getCharitiesToSync(session);
+    const result = await fetchOfferDetail(requestId, charities);
 
-    if (!serviceRequest) {
+    if (!result) {
       return NextResponse.json({ message: "الطلب غير موجود" }, { status: 404 });
     }
 
-    // Role-based visibility check
-    const { role, charityId, providerId } = session;
-    if (role === "CHARITY_STAFF" && charityId !== serviceRequest.charityId) {
-      return NextResponse.json({ message: "غير مصرح لك بعرض هذا الطلب" }, { status: 403 });
+    const { offer: fetchedOffer, agreedProducts, charity: matchedCharity } = result;
+
+    // Map Odoo state → local status
+    let localStatus = "RFQ";
+    if (fetchedOffer.offer_state === "approved") {
+      localStatus = "RAISING_CLAIM";
+    } else if (fetchedOffer.offer_state === "cancel" || fetchedOffer.offer_state === "cancel_done") {
+      localStatus = "CANCELLED";
     }
-    
-    if (role === "SERVICE_PROVIDER") {
-      // Providers can only see details of RFQs or requests assigned to them
-      const hasOffer = serviceRequest.priceOffers.some(o => o.providerId === providerId);
-      const isAssigned = serviceRequest.serviceProviderId === providerId;
-      const isRfq = serviceRequest.status === "RFQ";
-      
-      if (!isRfq && !isAssigned && !hasOffer) {
-        return NextResponse.json({ message: "غير مصرح لك بعرض هذا الطلب" }, { status: 403 });
-      }
-    }
+
+    const matchedProvider = await resolveProvider(
+      session,
+      matchedCharity,
+      fetchedOffer.offer_partner_name
+    );
+
+    const serviceRequest = {
+      id: fetchedOffer.offer_id,
+      name: fetchedOffer.offer_name,
+      beneficiaryName: fetchedOffer.beneficiary_name || "مستفيد خارجي",
+      beneficiaryNationalId: fetchedOffer.beneficiary_mobile || "",
+      status: localStatus,
+      serviceCost: 0,
+      charityContributionPercentage: 100,
+      charityContributionValue: 0,
+      beneficiaryContributionValue: 0,
+      description: fetchedOffer.sub_service_type || "",
+      createdAt: fetchedOffer.request_date
+        ? new Date(fetchedOffer.request_date).toISOString()
+        : new Date().toISOString(),
+      charityId: matchedCharity.id,
+      charity: matchedCharity,
+      serviceProviderId: matchedProvider?.id || null,
+      serviceProvider: matchedProvider || {
+        name: fetchedOffer.offer_partner_name || "مزود خدمة خارجي",
+      },
+      priceOffers: [],
+      agreedProducts,
+      offerLines: fetchedOffer.lines || [],
+      offerNotes: fetchedOffer.offer_notes || "",
+    };
 
     return NextResponse.json({ request: serviceRequest });
   } catch (error) {
@@ -63,7 +88,11 @@ export async function GET(
   }
 }
 
-export async function PUT(
+/* ================================================================== */
+/*  POST /api/requests/:id  — Submit a price offer to Odoo            */
+/* ================================================================== */
+
+export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -73,116 +102,138 @@ export async function PUT(
       return NextResponse.json({ message: "غير مصرح" }, { status: 401 });
     }
 
-    const { id: rawId } = await params;
-    const id = parseInt(rawId);
-    if (isNaN(id)) {
+    if (session.role !== "SERVICE_PROVIDER" || !session.providerId) {
+      return NextResponse.json(
+        { message: "يجب أن تكون مزود خدمة لتقديم عرض سعر" },
+        { status: 403 }
+      );
+    }
+
+    const { id } = await params;
+    const requestId = parseInt(id);
+    if (isNaN(requestId)) {
       return NextResponse.json({ message: "معرف الطلب غير صالح" }, { status: 400 });
     }
 
-    const body = await request.json();
-    const { status, description } = body;
-
-    const existingRequest = await prisma.serviceRequest.findUnique({
-      where: { id },
-      include: { priceOffers: true }
+    // Resolve charities for this provider
+    const provider = await prisma.serviceProvider.findUnique({
+      where: { id: session.providerId },
+      include: { charities: { where: { status: "CONNECTED" } } },
     });
 
+    const charities = (provider?.charities || []).map((c) => ({
+      ...c,
+      apiCode: provider?.apiCode || null,
+    }));
 
-    if (!existingRequest) {
+    const result = await fetchOfferDetail(requestId, charities as any);
+    if (!result) {
       return NextResponse.json({ message: "الطلب غير موجود" }, { status: 404 });
     }
 
-    const { role, charityId, providerId } = session;
+    const { offer: fetchedOffer, agreedProducts, charity: matchedCharity } = result;
 
-    // Validate update permissions and transition logic
-    const updateData: { status?: string; description?: string } = {};
+    // Verify the offer is still in RFQ state
+    const offerState = fetchedOffer.offer_state || "";
+    if (offerState === "approved" || offerState === "cancel" || offerState === "cancel_done") {
+      return NextResponse.json(
+        { message: "لا يمكن تقديم عرض سعر لطلب ليس في مرحلة طلب عروض الأسعار" },
+        { status: 400 }
+      );
+    }
 
-    if (status) {
-      // 1. Submit Claim (Service Provider transitions from RAISING_CLAIM to CLAIM_REVIEW)
-      if (status === "CLAIM_REVIEW") {
-        if (role !== "SERVICE_PROVIDER" || existingRequest.serviceProviderId !== providerId) {
+    // Validate request body
+    const reqBody = await request.json();
+    const validation = priceOfferSchema.safeParse(reqBody);
+    if (!validation.success) {
+      return NextResponse.json(
+        { message: validation.error.issues[0].message },
+        { status: 400 }
+      );
+    }
+
+    const { lines, notes } = validation.data;
+
+    // Build Odoo order lines & validate prices
+    const odooOrderLines: { product_id: number; price_unit: number }[] = [];
+    let amountTotal = 0;
+
+    if (agreedProducts.length > 0) {
+      for (const line of lines) {
+        const matchedProduct = agreedProducts.find(
+          (p: any) => p.product_id === line.productId
+        );
+        if (!matchedProduct) {
           return NextResponse.json(
-            { message: "يجب أن تكون مزود الخدمة المعين لتقديم المطالبة المالية" },
-            { status: 403 }
-          );
-        }
-        if (existingRequest.status !== "RAISING_CLAIM") {
-          return NextResponse.json(
-            { message: "لا يمكن تقديم مطالبة مالية في هذه المرحلة" },
+            { message: "أحد المنتجات المحددة غير موجود في هذا الطلب" },
             { status: 400 }
           );
         }
-        updateData.status = "CLAIM_REVIEW";
-      }
-
-      // 2. Reject Claim (Charity / Admin transitions back to RAISING_CLAIM)
-      else if (status === "RAISING_CLAIM" && existingRequest.status === "CLAIM_REVIEW") {
-        if (role !== "CHARITY_STAFF" && role !== "SUPER_ADMIN") {
+        if (line.price > matchedProduct.cost_price) {
           return NextResponse.json(
-            { message: "لا تملك صلاحية مراجعة أو رفض المطالبة المالية" },
-            { status: 403 }
-          );
-        }
-        if (role === "CHARITY_STAFF" && existingRequest.charityId !== charityId) {
-          return NextResponse.json({ message: "غير مصرح لك للتحكم بطلبات هذه الجمعية" }, { status: 403 });
-        }
-        updateData.status = "RAISING_CLAIM";
-      }
-
-      // 3. Complete Request / Approve Claim (Charity / Admin transitions to COMPLETED)
-      else if (status === "COMPLETED") {
-        if (role !== "CHARITY_STAFF" && role !== "SUPER_ADMIN") {
-          return NextResponse.json(
-            { message: "لا تملك صلاحية إعتماد اكتمال الطلب" },
-            { status: 403 }
-          );
-        }
-        if (role === "CHARITY_STAFF" && existingRequest.charityId !== charityId) {
-          return NextResponse.json({ message: "غير مصرح لك للتحكم بطلبات هذه الجمعية" }, { status: 403 });
-        }
-        if (existingRequest.status !== "CLAIM_REVIEW") {
-          return NextResponse.json(
-            { message: "يجب تقديم ومراجعة المطالبة المالية قبل إغلاق الطلب" },
+            {
+              message: `سعر العرض لا يمكن أن يتجاوز سعر التكلفة المتفق عليه للمنتج (${matchedProduct.cost_price} ر.س)`,
+            },
             { status: 400 }
           );
         }
-        updateData.status = "COMPLETED";
+        odooOrderLines.push({ product_id: line.productId, price_unit: line.price });
+        amountTotal += line.price;
       }
-
-      // Other general updates (Only Charity/Admin when request is in draft or RFQ)
-      else {
-        if (role !== "CHARITY_STAFF" && role !== "SUPER_ADMIN") {
-          return NextResponse.json({ message: "غير مصرح لك بتعديل هذا الطلب" }, { status: 403 });
-        }
-        if (role === "CHARITY_STAFF" && existingRequest.charityId !== charityId) {
-          return NextResponse.json({ message: "غير مصرح لك لتعديل طلبات هذه الجمعية" }, { status: 403 });
-        }
-        updateData.status = status;
+    } else {
+      for (const line of lines) {
+        odooOrderLines.push({ product_id: line.productId, price_unit: line.price });
+        amountTotal += line.price;
       }
     }
 
-    if (description !== undefined) {
-      if (role !== "CHARITY_STAFF" && role !== "SUPER_ADMIN") {
-        return NextResponse.json({ message: "غير مصرح لك بتعديل وصف الطلب" }, { status: 403 });
-      }
-      updateData.description = description;
+    // Submit to Odoo — offer_state must be "draft" for RFQ-stage offers
+    const postResult = await postOfferToOdoo(
+      requestId,
+      matchedCharity as any,
+      { offer_state: "draft", order_line: odooOrderLines }
+    );
+
+    if (!postResult.ok) {
+      return NextResponse.json(
+        { message: postResult.error || "حدث خطأ أثناء تقديم العرض في النظام الخارجي" },
+        { status: 500 }
+      );
     }
 
-    const updatedRequest = await prisma.serviceRequest.update({
-      where: { id },
-      data: updateData,
-      include: {
-        charity: true,
-        serviceProvider: true,
-      }
-    });
+    const offer = {
+      requestId,
+      providerId: session.providerId,
+      providerName: provider?.name || "",
+      charityId: matchedCharity.id,
+      charityName: matchedCharity.name,
+      amountTotal,
+      notes: notes || null,
+      lines: odooOrderLines,
+      status: "PENDING",
+      submittedAt: new Date().toISOString(),
+    };
 
-    return NextResponse.json({ request: updatedRequest });
+    return NextResponse.json({ offer }, { status: 201 });
   } catch (error) {
-    console.error("Update Request API Error:", error);
+    console.error("Create Offer API Error:", error);
     return NextResponse.json(
-      { message: "حدث خطأ أثناء تحديث الطلب" },
+      { message: "حدث خطأ أثناء تقديم عرض السعر" },
       { status: 500 }
     );
   }
+}
+
+/* ================================================================== */
+/*  PUT /api/requests/:id  — Update request status (placeholder)      */
+/* ================================================================== */
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return NextResponse.json(
+    { message: "Update via API not yet implemented" },
+    { status: 501 }
+  );
 }

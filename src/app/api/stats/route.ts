@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import prisma from "@/lib/db";
-import { Prisma } from "@prisma/client";
+import { fetchRFQsFromOdoo } from "@/app/api/requests/odoo";
 
 export async function GET() {
   try {
@@ -10,78 +9,45 @@ export async function GET() {
       return NextResponse.json({ message: "غير مصرح" }, { status: 401 });
     }
 
-    const { role, charityId, providerId } = session;
-
-    // Build query filters based on role
-    let filter: Prisma.ServiceRequestWhereInput = {};
-    if (role === "CHARITY_STAFF" && charityId) {
-      filter.charityId = charityId;
-    } else if (role === "SERVICE_PROVIDER" && providerId) {
-      // Service Provider sees:
-      // 1. RFQs (open to all providers to submit offers)
-      // 2. Or requests where this provider is selected/assigned
-      filter = {
-        OR: [
-          { status: "RFQ" },
-          { serviceProviderId: providerId }
-        ]
-      };
+    // Fetch live RFQs from Odoo
+    let odooRFQs: any[] = [];
+    try {
+      odooRFQs = await fetchRFQsFromOdoo(session);
+    } catch (err) {
+      console.error("Stats API Error fetching Odoo RFQs:", err);
     }
 
-    // Fetch all relevant requests to compile stats
-    const requests = await prisma.serviceRequest.findMany({
-      where: filter,
-      include: {
-        charity: true,
-        serviceProvider: true,
-        priceOffers: {
-          include: {
-            provider: true
-          }
-        }
-      },
-      orderBy: { updatedAt: "desc" }
-    });
+    // Compute stats from API data
+    const rfqCount = odooRFQs.length;
 
-    // Compute stats
-    let rfqCount = 0;
-    let claimCount = 0;
-    let completedCount = 0;
-    let pendingCount = 0;
-
-    requests.forEach((req) => {
-      if (req.status === "RFQ") {
-        rfqCount++;
-      } else if (req.status === "RAISING_CLAIM" || req.status === "CLAIM_REVIEW") {
-        claimCount++;
-      } else if (req.status === "COMPLETED") {
-        completedCount++;
-      } else {
-        pendingCount++;
-      }
-    });
-
-    // Get recent activity list (last 5 requests)
-    const recentRequests = requests.slice(0, 5).map((req) => ({
+    // Compile recent activity list
+    const recentRequests = odooRFQs.map((req) => ({
       id: req.id,
       name: req.name,
       beneficiaryName: req.beneficiaryName,
-      charityName: req.charity.name,
+      charityName: req.charity?.name || "",
       providerName: req.serviceProvider?.name || "لم يحدد بعد",
       status: req.status,
-      cost: req.serviceCost,
-      date: req.dateRequest,
+      cost: req.serviceCost || 0,
+      date: req.createdAt,
     }));
+
+    // Sort descending by date
+    recentRequests.sort((a, b) => {
+      const dateA = a.date ? new Date(a.date).getTime() : 0;
+      const dateB = b.date ? new Date(b.date).getTime() : 0;
+      return dateB - dateA;
+    });
 
     return NextResponse.json({
       stats: {
         rfqCount,
-        claimCount,
-        completedCount,
-        pendingCount,
-        totalCount: requests.length,
+        claimCount: 0,
+        completedCount: 0,
+        pendingCount: 0,
+        totalCount: rfqCount,
       },
-      recentRequests,
+      recentRequests: recentRequests.slice(0, 5),
     });
   } catch (error) {
     console.error("Stats API Error:", error);

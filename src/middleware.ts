@@ -22,6 +22,13 @@ export async function middleware(request: NextRequest) {
 
   // Paths that should not be accessible if already authenticated (redirect to portal)
   if (pathname === "/" || pathname === "/login") {
+    // If the URL contains ?clear=1, delete the session and redirect back to /login
+    if (request.nextUrl.searchParams.get("clear") === "1") {
+      const response = NextResponse.redirect(new URL("/login", request.url));
+      response.cookies.delete("session");
+      return response;
+    }
+
     const sessionCookie = request.cookies.get("session")?.value;
     if (sessionCookie) {
       const session = await verifyToken(sessionCookie);

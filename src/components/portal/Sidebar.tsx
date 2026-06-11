@@ -45,6 +45,13 @@ export default function Sidebar({ user }: SidebarProps) {
       href: "/portal/requests",
       icon: FileText,
     },
+    ...(user.role === "SUPER_ADMIN" ? [
+      {
+        name: "مزودي الخدمة",
+        href: "/portal/providers",
+        icon: Wrench,
+      }
+    ] : []),
     {
       name: "الإعدادات",
       href: "/portal/settings",
