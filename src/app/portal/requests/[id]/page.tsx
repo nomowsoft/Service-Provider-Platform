@@ -10,8 +10,6 @@ import {
   ShieldAlert, 
   CheckCircle2, 
   Coins, 
-  Calculator,
-  FileSpreadsheet,
   AlertCircle,
   FileCheck2,
   Wrench,
@@ -338,6 +336,64 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   const { role, provider } = session || {};
   const isOwnerProvider = request.serviceProviderId === provider?.id;
 
+  // Odoo status helper mapping
+  const getOdooStatusLabelAndStyle = (status: string) => {
+    const s = (status || "").toLowerCase();
+    switch (s) {
+      case "draft":
+        return { label: "مسودة عرض تسعير", bg: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-350 dark:border-slate-800" };
+      case "sent":
+        return { label: "طلب تسعير مرسل", bg: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-450 dark:border-blue-900/50" };
+      case "to_approve":
+        return { label: "في انتظار الموافقة", bg: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-450 dark:border-amber-900/50" };
+      case "purchase":
+        return { label: "أمر شراء", bg: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-450 dark:border-emerald-900/50" };
+      case "approved":
+        return { label: "معتمد من الجمعية", bg: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/30 dark:text-teal-450 dark:border-teal-900/50" };
+      case "done":
+        return { label: "مكتمل / منتهي", bg: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-450 dark:border-green-900/50" };
+      case "cancel":
+      case "cancel_done":
+        return { label: "ملغي", bg: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-450 dark:border-rose-900/50" };
+      case "rfq":
+        return { label: "طلب تسعير", bg: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-450 dark:border-emerald-900/50" };
+      case "beneficiary_contribution":
+        return { label: "مساهمة المستفيد", bg: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-900/50" };
+      case "raising_claim":
+        return { label: "رفع المطالبة", bg: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/50" };
+      case "claim_review":
+        return { label: "مراجعة المطالبة", bg: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/30 dark:text-teal-400 dark:border-teal-900/50" };
+      case "completed":
+        return { label: "مكتمل", bg: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-900/50" };
+      case "cancelled":
+        return { label: "ملغي", bg: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/50" };
+      default:
+        return { label: status, bg: "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950/30 dark:text-gray-400 dark:border-gray-900/50" };
+    }
+  };
+
+  const normalizeStatus = (status: string) => {
+    const s = (status || "").toLowerCase();
+    if (s === "draft" || s === "sent" || s === "to_approve" || s === "rfq") {
+      return "RFQ";
+    }
+    if (s === "approved" || s === "raising_claim") {
+      return "RAISING_CLAIM";
+    }
+    if (s === "purchase" || s === "claim_review") {
+      return "CLAIM_REVIEW";
+    }
+    if (s === "done" || s === "completed") {
+      return "COMPLETED";
+    }
+    if (s === "cancel" || s === "cancel_done" || s === "cancelled") {
+      return "CANCELLED";
+    }
+    return "RFQ";
+  };
+
+  const localStatus = normalizeStatus(request.status);
+
   // Stages array for visual Odoo timeline
   const stages = [
     { key: "RFQ", label: "عرض السعر" },
@@ -350,7 +406,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
     return stages.findIndex(s => s.key === status);
   };
 
-  const currentStageIndex = getStageIndex(request.status);
+  const currentStageIndex = getStageIndex(localStatus);
 
   return (
     <div className="space-y-6">
@@ -362,9 +418,14 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
         >
           <ArrowLeft size={16} />
         </button>
-        <div>
-          <h1 className="text-xl font-extrabold text-emerald-950 dark:text-white">تفاصيل الطلب {request.name}</h1>
-          <p className="text-xs text-emerald-600/70 dark:text-emerald-400 mt-0.5">متابعة ومعالجة حالة الطلب والمطالبات المالية</p>
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-extrabold text-emerald-950 dark:text-white">تفاصيل الطلب {request.name}</h1>
+            <span className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-xs font-semibold ${getOdooStatusLabelAndStyle(request.status).bg}`}>
+              {getOdooStatusLabelAndStyle(request.status).label}
+            </span>
+          </div>
+          <p className="text-xs text-emerald-600/70 dark:text-emerald-400 mt-0.5 md:mt-0">متابعة ومعالجة حالة الطلب والمطالبات المالية في أودو</p>
         </div>
       </div>
 
@@ -375,7 +436,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
           
           <div className="flex-1 flex flex-row items-center justify-start md:justify-end gap-1 sm:gap-2">
             {stages.map((stage, idx) => {
-              const isActive = request.status === stage.key;
+              const isActive = localStatus === stage.key;
               const isPast = idx < currentStageIndex;
               return (
                 <div key={stage.key} className="flex items-center">
@@ -401,10 +462,10 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* Main content columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="space-y-6">
         
         {/* Left Column: Core Request Information */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
           <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 space-y-6">
             <h2 className="text-base font-extrabold text-emerald-950 dark:text-white border-b border-emerald-50 dark:border-emerald-950 pb-3">
               البيانات العامة للطلب
@@ -469,7 +530,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             </h2>
 
             {/* A: Form for Service Provider in RFQ stage */}
-            {role === "SERVICE_PROVIDER" && request.status === "RFQ" && (
+            {role === "SERVICE_PROVIDER" && localStatus === "RFQ" && (
               <form onSubmit={handleSubmitOffer} className="space-y-4">
                 <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-4 border border-emerald-100/30 flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300">
                   <AlertCircle size={16} />
@@ -655,7 +716,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             )}
 
             {/* B: Form for Service Provider in RAISING_CLAIM stage */}
-            {role === "SERVICE_PROVIDER" && request.status === "RAISING_CLAIM" && isOwnerProvider && (
+            {role === "SERVICE_PROVIDER" && localStatus === "RAISING_CLAIM" && isOwnerProvider && (
               <form onSubmit={handleSubmitClaim} className="space-y-4">
                 <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-4 border border-emerald-100/30 flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300">
                   <FileCheck2 size={18} />
@@ -681,7 +742,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             )}
 
             {/* C: Form for Charity Staff / Admin to review a submitted financial claim */}
-            {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && request.status === "CLAIM_REVIEW" && (
+            {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && localStatus === "CLAIM_REVIEW" && (
               <div className="space-y-4">
                 <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 p-4 border border-amber-100/30 flex items-center gap-3 text-xs text-amber-800 dark:text-amber-300">
                   <Coins size={18} />
@@ -711,32 +772,32 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             )}
 
             {/* D: General statuses where no actions are pending */}
-            {request.status === "COMPLETED" && (
+            {localStatus === "COMPLETED" && (
               <div className="rounded-2xl bg-green-50 dark:bg-green-950/40 p-5 border border-green-100/30 flex items-center gap-3 text-sm text-green-800 dark:text-green-300 font-semibold">
                 <CheckCircle2 size={20} className="text-green-600" />
                 <span>تم اكتمال هذا الطلب وإغلاقه وصرف المستحقات بنجاح!</span>
               </div>
             )}
 
-            {role === "SERVICE_PROVIDER" && request.status === "RAISING_CLAIM" && !isOwnerProvider && (
+            {role === "SERVICE_PROVIDER" && localStatus === "RAISING_CLAIM" && !isOwnerProvider && (
               <div className="rounded-2xl bg-slate-50 dark:bg-[#03251c]/30 p-4 text-xs text-slate-500">
                 تمت ترسية هذا الطلب على مزود خدمة آخر.
               </div>
             )}
 
-            {role === "SERVICE_PROVIDER" && request.status === "CLAIM_REVIEW" && isOwnerProvider && (
+            {role === "SERVICE_PROVIDER" && localStatus === "CLAIM_REVIEW" && isOwnerProvider && (
               <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-4 text-xs text-emerald-800 dark:text-emerald-300 font-medium">
                 تم تقديم مطالبتك المالية بنجاح. يرجى الانتظار لحين قيام ممثلي الجمعية بمراجعة المستندات والصرف.
               </div>
             )}
 
-            {role === "SERVICE_PROVIDER" && request.status === "CLAIM_REVIEW" && !isOwnerProvider && (
+            {role === "SERVICE_PROVIDER" && localStatus === "CLAIM_REVIEW" && !isOwnerProvider && (
               <div className="rounded-2xl bg-slate-50 dark:bg-[#03251c]/30 p-4 text-xs text-slate-500">
                 تمت ترسية هذا الطلب على مزود خدمة آخر وهو في مرحلة المراجعة المالية حالياً.
               </div>
             )}
 
-            {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && request.status === "RAISING_CLAIM" && (
+            {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && localStatus === "RAISING_CLAIM" && (
               <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-5 border border-emerald-100/30 flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300 font-medium">
                 <Wrench size={18} />
                 <span>الطلب قيد العمل والتشغيل حالياً من قبل مزود الخدمة ({request.serviceProvider?.name}). بانتظار قيام المزود برفع المطالبة المالية للصرف.</span>
@@ -745,128 +806,6 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        {/* Right Column: Financial Split Calculator & Offers List */}
-        <div className="space-y-6">
-          
-          {/* Split contribution box */}
-          <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 space-y-5">
-            <div className="flex items-center gap-2 border-b border-emerald-50 dark:border-emerald-950 pb-3">
-              <Calculator className="text-emerald-700" size={18} />
-              <h2 className="text-base font-extrabold text-emerald-950 dark:text-white">مساهمات سداد التكلفة</h2>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-                <span>التكلفة الإجمالية:</span>
-                <span className="text-sm font-extrabold text-emerald-950 dark:text-white">
-                  {request.serviceCost > 0 ? `${request.serviceCost.toLocaleString()} ر.س` : "لم تسعر بعد"}
-                </span>
-              </div>
-
-              <div className="border-t border-dashed border-emerald-50 dark:border-emerald-950 pt-3 space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500 font-medium">حصة الجمعية الأهلية ({request.charityContributionPercentage}%):</span>
-                  <span className="font-bold text-emerald-800 dark:text-emerald-300">
-                    {request.serviceCost > 0 ? `${request.charityContributionValue.toLocaleString()} ر.س` : "-"}
-                  </span>
-                </div>
-
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500 font-medium">مساهمة المستفيد (قيمة ثابتة):</span>
-                  <span className="font-bold text-slate-700 dark:text-slate-300">
-                    {request.serviceCost > 0 ? `${request.beneficiaryContributionValue.toLocaleString()} ر.س` : `${request.beneficiaryContributionValue.toLocaleString()} ر.س`}
-                  </span>
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-3.5 border border-emerald-100/20 text-[10px] leading-relaxed text-emerald-800 dark:text-emerald-300">
-                <span className="font-bold block mb-0.5">توضيح طريقة التوزيع:</span>
-                يقوم المستفيد بدفع مساهمة مقطوعة ثابتة وقدرها ({request.beneficiaryContributionValue} ر.س)، وتتكفل الجمعية بنسبة ({request.charityContributionPercentage}%) من الجزء المتبقي من التكلفة المعتمدة.
-              </div>
-            </div>
-          </div>
-
-          {/* Price Offers List (visible to Charity Staff / Admin for decision, or to own provider for status check) */}
-          <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 space-y-4">
-            <div className="flex items-center gap-2 border-b border-emerald-50 dark:border-emerald-950 pb-3">
-              <FileSpreadsheet className="text-emerald-700" size={18} />
-              <h2 className="text-base font-extrabold text-emerald-950 dark:text-white">عروض الأسعار المقدمة</h2>
-            </div>
-
-            {request.priceOffers.length === 0 ? (
-              <div className="text-center py-6 text-slate-400 text-xs border border-dashed border-emerald-50 dark:border-emerald-950 rounded-2xl">
-                لا توجد عروض أسعار مقدمة حالياً.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {request.priceOffers.map((offer) => {
-                  const isOwnOffer = provider?.id === offer.provider.id;
-                  
-                  return (
-                    <div 
-                      key={offer.id} 
-                      className={`border rounded-2xl p-4 space-y-3 transition ${
-                        offer.status === "APPROVED"
-                          ? "bg-green-500/5 border-green-500/30"
-                          : offer.status === "REJECTED"
-                            ? "bg-rose-500/5 border-rose-500/10 opacity-70"
-                            : "bg-white dark:bg-[#03251c]/30 border-emerald-100 dark:border-emerald-950"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-emerald-950 dark:text-white flex items-center gap-1">
-                            {offer.provider.name}
-                            {isOwnOffer && (
-                              <span className="bg-emerald-500 text-white rounded px-1.5 py-0.5 text-[8px]">
-                                عرضك
-                              </span>
-                            )}
-                          </span>
-                          <span className="text-[10px] text-slate-500 mt-0.5">
-                            {new Date(offer.createdAt).toLocaleDateString("ar-SA")}
-                          </span>
-                        </div>
-                        <span className="text-sm font-extrabold text-emerald-950 dark:text-emerald-100">
-                          {offer.amountTotal.toLocaleString()} ر.س
-                        </span>
-                      </div>
-
-                      {offer.notes && (
-                        <p className="text-[11px] text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-[#03251c]/50 p-2 rounded-xl">
-                          {offer.notes}
-                        </p>
-                      )}
-
-                      <div className="flex items-center justify-between border-t border-emerald-50/50 dark:border-emerald-950/40 pt-2.5">
-                        <span className={`text-[10px] font-bold ${
-                          offer.status === "APPROVED" 
-                            ? "text-green-600" 
-                            : offer.status === "REJECTED" 
-                              ? "text-rose-500" 
-                              : "text-amber-500"
-                        }`}>
-                          الحالة: {offer.status === "APPROVED" ? "مقبول" : offer.status === "REJECTED" ? "مرفوض" : "معلق"}
-                        </span>
-
-                        {/* Decision button for Charity / Admin */}
-                        {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && request.status === "RFQ" && offer.status === "PENDING" && (
-                          <button
-                            onClick={() => handleApproveOffer(offer.id)}
-                            disabled={actionLoading}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-xl px-3 py-1.5 shadow transition"
-                          >
-                            اعتماد وترسية
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

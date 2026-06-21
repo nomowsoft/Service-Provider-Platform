@@ -16,10 +16,8 @@ export async function POST(request: Request) {
     }
 
     // 1. Validation using Zod
-    console.log(body);
     const validation = integrationRequestSchema.safeParse(body);
     if (!validation.success) {
-      console.log(validation.error.issues[0].message);
       const firstErrorMessage = validation.error.issues[0].message;
       return NextResponse.json({ message: firstErrorMessage }, { status: 400 });
     }

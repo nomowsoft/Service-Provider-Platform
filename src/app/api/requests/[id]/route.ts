@@ -38,13 +38,7 @@ export async function GET(
 
     const { offer: fetchedOffer, agreedProducts, charity: matchedCharity } = result;
 
-    // Map Odoo state → local status
-    let localStatus = "RFQ";
-    if (fetchedOffer.offer_state === "approved") {
-      localStatus = "RAISING_CLAIM";
-    } else if (fetchedOffer.offer_state === "cancel" || fetchedOffer.offer_state === "cancel_done") {
-      localStatus = "CANCELLED";
-    }
+    const localStatus = fetchedOffer.offer_state || "draft";
 
     const matchedProvider = await resolveProvider(
       session,
