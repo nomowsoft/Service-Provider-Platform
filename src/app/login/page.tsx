@@ -85,7 +85,7 @@ export default function LoginPage() {
         <div className="glass-card rounded-3xl p-8 shadow-2xl shadow-black/40 border border-emerald-500/10">
           <form className="space-y-6" onSubmit={handleLogin}>
             {error && (
-              <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 p-4 text-sm text-rose-300 text-center font-medium animate-shake">
+              <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 p-4 text-sm text-rose-500 text-center font-medium animate-shake">
                 {error}
               </div>
             )}

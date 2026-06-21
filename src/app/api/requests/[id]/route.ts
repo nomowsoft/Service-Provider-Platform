@@ -70,6 +70,7 @@ export async function GET(
       agreedProducts,
       offerLines: fetchedOffer.lines || [],
       offerNotes: fetchedOffer.offer_notes || "",
+      providerNote: fetchedOffer.provider_note || "",
     };
 
     return NextResponse.json({ request: serviceRequest });
@@ -146,7 +147,7 @@ export async function POST(
       );
     }
 
-    const { lines, notes } = validation.data;
+    const { lines, provider_note } = validation.data;
 
     // Build Odoo order lines & validate prices
     const odooOrderLines: { product_id: number; price_unit: number }[] = [];
@@ -166,7 +167,7 @@ export async function POST(
         if (line.price > matchedProduct.cost_price) {
           return NextResponse.json(
             {
-              message: `سعر العرض لا يمكن أن يتجاوز سعر التكلفة المتفق عليه للمنتج (${matchedProduct.cost_price} ر.س)`,
+              message: `سعر العرض لا يمكن أن يتجاوز سعر التكلفة المتفق عليه للمنتج (${matchedProduct.cost_price})`,
             },
             { status: 400 }
           );
@@ -185,7 +186,11 @@ export async function POST(
     const postResult = await postOfferToOdoo(
       requestId,
       matchedCharity as any,
-      { offer_state: "draft", order_line: odooOrderLines }
+      { 
+        offer_state: "to approve", 
+        order_line: odooOrderLines,
+        provider_note: provider_note || ""
+      }
     );
 
     if (!postResult.ok) {
@@ -202,7 +207,7 @@ export async function POST(
       charityId: matchedCharity.id,
       charityName: matchedCharity.name,
       amountTotal,
-      notes: notes || null,
+      notes: provider_note || null,
       lines: odooOrderLines,
       status: "PENDING",
       submittedAt: new Date().toISOString(),

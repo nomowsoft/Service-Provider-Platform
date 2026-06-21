@@ -431,6 +431,9 @@ export async function fetchClaimDetailFromOdoo(session: SessionPayload, purchase
           charity: { name: charity.name },
           lines: claim.lines || [],
           invoices: claim.invoices || [],
+          accountMoveDate: claim.invoices[0].account_move_date
+            ? new Date(claim.invoices[0].account_move_date).toISOString()
+            : new Date().toISOString(),
         };
       }
     } catch (err) {
@@ -440,4 +443,56 @@ export async function fetchClaimDetailFromOdoo(session: SessionPayload, purchase
 
   return null;
 }
+
+/**
+ * POST to Odoo raising claim API.
+ */
+export async function postClaimToOdoo(
+  purchaseOrderId: number,
+  charity: SyncCharity,
+  params: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string }> {
+  const base = buildBaseUrl(charity.domain || DEFAULT_DOMAIN);
+  const url = `${base}api/cerp/raising/claim/${purchaseOrderId}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        code: charity.apiCode || "",
+        token: charity.token,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "call",
+        params,
+      }),
+      signal: AbortSignal.timeout(15000), // File uploads might take longer
+    });
+
+    const body = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg = body?.message || body?.error?.message || res.statusText;
+      return { ok: false, error: msg || "فشل الاتصال بالنظام الخارجي" };
+    }
+
+    if (body?.error) {
+      const msg = body.error?.data?.message || body.error?.message || "خطأ في النظام الخارجي";
+      return { ok: false, error: msg };
+    }
+
+    const result = body?.result;
+    if (result && result.success === false) {
+      return { ok: false, error: result.message || "خطأ في النظام الخارجي" };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error("Odoo Claim submission error:", err);
+    return { ok: false, error: "حدث خطأ في الاتصال بالنظام الخارجي" };
+  }
+}
+
 

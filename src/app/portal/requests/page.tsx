@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import DatePicker from "@/components/ui/DatePicker";
+import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
 
 
 interface RequestItem {
@@ -142,7 +143,7 @@ export default function RequestsPage() {
         return { label: "مسودة عرض تسعير", bg: "bg-slate-50 text-slate-700 border-slate-200" };
       case "sent":
         return { label: "طلب تسعير مرسل", bg: "bg-blue-50 text-blue-700 border-blue-200" };
-      case "to_approve":
+      case "to approve":
         return { label: "في انتظار الموافقة", bg: "bg-amber-50 text-amber-700 border-amber-200" };
       case "purchase":
         return { label: "أمر شراء", bg: "bg-emerald-50 text-emerald-700 border-emerald-200" };
@@ -328,7 +329,14 @@ export default function RequestsPage() {
                   <div className="flex flex-col">
                     <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400 font-bold">التكلفة الإجمالية</span>
                     <span className="text-sm font-extrabold text-emerald-950 dark:text-emerald-100">
-                      {req.serviceCost > 0 ? `${req.serviceCost.toLocaleString()} ر.س` : "بانتظار العروض"}
+                      {req.serviceCost > 0 ? (
+                        <span className="inline-flex items-center gap-1">
+                          {req.serviceCost.toLocaleString()}
+                          <SaudiRiyalIcon size={10} />
+                        </span>
+                      ) : (
+                        "بانتظار العروض"
+                      )}
                     </span>
                   </div>
                   <Link

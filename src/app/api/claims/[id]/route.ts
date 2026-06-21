@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { fetchClaimDetailFromOdoo } from "../../requests/odoo";
+import { fetchClaimDetailFromOdoo, getCharitiesToSync, postClaimToOdoo } from "../../requests/odoo";
+import { raisingClaimSchema } from "@/utils/validation";
 
 /**
  * GET /api/claims/:id
@@ -37,3 +38,74 @@ export async function GET(
     );
   }
 }
+
+/**
+ * POST /api/claims/:id
+ * Raises a financial claim (creates an invoice) in Odoo.
+ */
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ message: "غير مصرح" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const purchaseOrderId = parseInt(id);
+    if (isNaN(purchaseOrderId)) {
+      return NextResponse.json({ message: "معرف الطلب غير صالح" }, { status: 400 });
+    }
+
+    const reqBody = await request.json();
+    const validation = raisingClaimSchema.safeParse(reqBody);
+    if (!validation.success) {
+      return NextResponse.json(
+        { message: validation.error.issues[0].message },
+        { status: 400 }
+      );
+    }
+
+    const { ref, invoice_date, attachments, invoice_lines } = validation.data;
+
+    // Resolve charities
+    const charities = await getCharitiesToSync(session);
+    if (charities.length === 0) {
+      return NextResponse.json(
+        { message: "لا توجد جمعيات متصلة أو مصرح بها لهذا المزود" },
+        { status: 400 }
+      );
+    }
+
+    // Use the connected charity to route the request
+    const charity = charities[0];
+
+    const payload = {
+      claim_status: "raising_the_claim",
+      ref,
+      invoice_date,
+      attachments: attachments || [],
+      invoice_lines,
+    };
+
+    const postResult = await postClaimToOdoo(purchaseOrderId, charity, payload);
+
+    if (!postResult.ok) {
+      return NextResponse.json(
+        { message: postResult.error || "حدث خطأ أثناء تقديم المطالبة في النظام الخارجي" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true }, { status: 201 });
+  } catch (error) {
+    console.error("Create Claim API Error:", error);
+    return NextResponse.json(
+      { message: "حدث خطأ أثناء تقديم المطالبة المالية" },
+      { status: 500 }
+    );
+  }
+}
+

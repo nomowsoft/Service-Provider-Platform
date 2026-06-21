@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import DatePicker from "@/components/ui/DatePicker";
+import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
 
 interface ClaimItem {
   id: string;
@@ -218,8 +219,9 @@ export default function ClaimsPage() {
               <div className="flex items-center justify-between">
                 <div className="flex flex-col">
                   <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400 font-bold">التكلفة الإجمالية</span>
-                  <span className="text-sm font-extrabold text-emerald-950 dark:text-emerald-100">
-                    {claim.serviceCost.toLocaleString()} ر.س
+                  <span className="text-sm font-extrabold text-emerald-950 dark:text-emerald-100 inline-flex items-center gap-1">
+                    {claim.serviceCost.toLocaleString()}
+                    <SaudiRiyalIcon size={10} />
                   </span>
                 </div>
                 <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/30 px-3 py-1.5 rounded-xl border border-emerald-100/50 dark:border-emerald-900/40">

@@ -10,6 +10,7 @@ import {
   ChevronLeft
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
 
 interface StatMetrics {
   rfqCount: number;
@@ -244,7 +245,14 @@ export default function PortalDashboard() {
                       <td className="py-4 px-2 text-slate-600 dark:text-slate-300 text-xs">{req.providerName}</td>
                       <td className="py-4 px-2">{getStatusBadge(req.status)}</td>
                       <td className="py-4 px-2 text-left font-bold text-emerald-950 dark:text-emerald-100">
-                        {req.cost > 0 ? `${req.cost.toLocaleString()} ر.س` : "لم تسعر بعد"}
+                        {req.cost > 0 ? (
+                          <span className="inline-flex items-center gap-1">
+                            {req.cost.toLocaleString()}
+                            <SaudiRiyalIcon size={10} />
+                          </span>
+                        ) : (
+                          "لم تسعر بعد"
+                        )}
                       </td>
                     </tr>
                   ))}

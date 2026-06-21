@@ -83,6 +83,10 @@ export async function GET() {
         domain: true,
         connectedAt: true,
         createdAt: true,
+        pendingName: true,
+        pendingEmail: true,
+        pendingPhone: true,
+        pendingDomain: true,
       },
     });
 

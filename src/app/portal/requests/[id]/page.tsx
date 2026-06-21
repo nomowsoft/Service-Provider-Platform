@@ -2,14 +2,14 @@
 
 import { useState, useEffect, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  ArrowLeft, 
-  Calendar, 
-  Building, 
-  User, 
-  ShieldAlert, 
-  CheckCircle2, 
-  Coins, 
+import {
+  ArrowLeft,
+  Calendar,
+  Building,
+  User,
+  ShieldAlert,
+  CheckCircle2,
+  Coins,
   AlertCircle,
   FileCheck2,
   Wrench,
@@ -17,6 +17,7 @@ import {
   ThumbsDown
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
 
 interface PriceOffer {
   id: number;
@@ -45,7 +46,7 @@ interface RequestDetail {
   description: string;
   createdAt: string;
   charityId: number;
-  charity: { 
+  charity: {
     name: string;
     token?: string;
   };
@@ -53,7 +54,9 @@ interface RequestDetail {
   serviceProvider?: { name: string } | null;
   priceOffers: PriceOffer[];
   agreedProducts?: any[];
-  offerLines?: { id: number; name: string; price_total: number; price_unit: number; product_id: number; product_qty: number }[];
+  offerLines?: { id: number; name: string; price_subtotal: number; price_unit: number; product_id: number; product_qty: number }[];
+  offerNotes?: string | null;
+  providerNote?: string | null;
 }
 
 interface SessionUser {
@@ -82,7 +85,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   const [session, setSession] = useState<SessionUser | null>(null);
 
   // Form states: Price Offer
-  const [offerNotes, setOfferNotes] = useState("");
+  const [providerNote, setProviderNote] = useState("");
   const [offerLines, setOfferLines] = useState<{ id: string; productId: number | ""; price: string; productName: string; productCode: string }[]>([
     { id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "" }
   ]);
@@ -134,7 +137,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             productCode: matchedProd?.provider_product_code || "",
           };
         }));
-        setOfferNotes(data.request.offerNotes || "");
+        setProviderNote(data.request.providerNote || "");
       } else if (sessionData?.user?.role === "SERVICE_PROVIDER") {
         // No existing lines, start with empty form
         setOfferLines([{ id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "" }]);
@@ -175,9 +178,9 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
       const res = await fetch(`/api/requests/${id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          lines: formattedLines, 
-          notes: offerNotes
+        body: JSON.stringify({
+          lines: formattedLines,
+          provider_note: providerNote
         }),
       });
 
@@ -197,7 +200,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   // Select / Approve Price Offer
   const handleApproveOffer = async (offerId: number) => {
     if (!confirm("هل أنت متأكد من رغبتك في الموافقة على عرض السعر هذا وترسية الطلب عليه؟")) return;
-    
+
     if (!request) return;
     const selectedOffer = request.priceOffers.find((o) => o.id === offerId);
     if (!selectedOffer) {
@@ -214,7 +217,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
       const resOffer = await fetch(`/api/offers/${offerId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           action: "approve",
           code,
           token,
@@ -294,8 +297,8 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
       const res = await fetch(`/api/requests/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          status: approve ? "COMPLETED" : "RAISING_CLAIM" 
+        body: JSON.stringify({
+          status: approve ? "COMPLETED" : "RAISING_CLAIM"
         }),
       });
 
@@ -440,14 +443,13 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
               const isPast = idx < currentStageIndex;
               return (
                 <div key={stage.key} className="flex items-center">
-                  <div 
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all border ${
-                      isActive 
+                  <div
+                    className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all border ${isActive
                         ? "bg-[#064e3b] text-white border-emerald-950 ring-4 ring-emerald-500/20"
-                        : isPast 
+                        : isPast
                           ? "bg-emerald-550/20 text-emerald-700 dark:text-emerald-400 border-emerald-200"
                           : "bg-slate-100 dark:bg-[#03251c] text-slate-400 dark:text-slate-600 border-slate-200 dark:border-emerald-950"
-                    }`}
+                      }`}
                   >
                     {stage.label}
                   </div>
@@ -463,7 +465,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
 
       {/* Main content columns */}
       <div className="space-y-6">
-        
+
         {/* Left Column: Core Request Information */}
         <div className="space-y-6">
           <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 space-y-6">
@@ -515,11 +517,19 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
 
-            <div className="border-t border-emerald-50 dark:border-emerald-950 pt-4 space-y-2">
-              <span className="text-xs font-bold text-slate-500">تفاصيل الخدمة الطبية المطلوبة:</span>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-[#03251c]/30 rounded-2xl p-4">
-                {request.description}
-              </p>
+            <div className="border-t border-emerald-50 dark:border-emerald-950 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-500">تفاصيل الخدمة الطبية المطلوبة:</span>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-[#03251c]/30 rounded-2xl p-4 min-h-[80px]">
+                  {request.description}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-500">ملاحظات الطلب:</span>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-[#03251c]/30 rounded-2xl p-4 min-h-[80px]">
+                  {request.offerNotes || "لا يوجد ملاحظات للطلب"}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -559,138 +569,143 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                   {offerLines.map((line, index) => {
                     const matchedProduct = request.agreedProducts?.find((p: any) => p.product_id === line.productId);
                     return (
-                    <div key={line.id} className="bg-white dark:bg-[#03251c] p-4 rounded-xl shadow-sm border border-emerald-50 dark:border-emerald-900/30 space-y-3">
-                      {/* Row 1: Product selector */}
-                      {request.agreedProducts && request.agreedProducts.length > 0 && (
-                        <div className="input-group">
-                          <label className="text-[10px]">المنتج / الخدمة</label>
-                          <select 
-                            value={line.productId}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const numVal = val ? Number(val) : "";
-                              const newLines = [...offerLines];
-                              newLines[index].productId = numVal;
-                              
-                              if (numVal) {
-                                const prod = request.agreedProducts?.find((p: any) => p.product_id === numVal);
-                                // Look up the product name from existing offerLines data (Odoo line name)
-                                const existingLine = request.offerLines?.find((ol: any) => ol.product_id === numVal);
-                                if (prod) {
-                                  newLines[index].price = prod.cost_price.toString();
-                                  newLines[index].productName = existingLine?.name || prod.provider_product_name || "";
-                                  newLines[index].productCode = prod.provider_product_code || "";
+                      <div key={line.id} className="bg-white dark:bg-[#03251c] p-4 rounded-xl shadow-sm border border-emerald-50 dark:border-emerald-900/30 space-y-3">
+                        {/* Row 1: Product selector */}
+                        {request.agreedProducts && request.agreedProducts.length > 0 && (
+                          <div className="input-group">
+                            <label className="text-[10px]">المنتج / الخدمة</label>
+                            <select
+                              value={line.productId}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const numVal = val ? Number(val) : "";
+                                const newLines = [...offerLines];
+                                newLines[index].productId = numVal;
+
+                                if (numVal) {
+                                  const prod = request.agreedProducts?.find((p: any) => p.product_id === numVal);
+                                  // Look up the product name from existing offerLines data (Odoo line name)
+                                  const existingLine = request.offerLines?.find((ol: any) => ol.product_id === numVal);
+                                  if (prod) {
+                                    newLines[index].price = prod.cost_price.toString();
+                                    newLines[index].productName = existingLine?.name || prod.provider_product_name || "";
+                                    newLines[index].productCode = prod.provider_product_code || "";
+                                  }
+                                } else {
+                                  newLines[index].price = "";
+                                  newLines[index].productName = "";
+                                  newLines[index].productCode = "";
                                 }
-                              } else {
-                                newLines[index].price = "";
-                                newLines[index].productName = "";
-                                newLines[index].productCode = "";
-                              }
-                              setOfferLines(newLines);
-                            }}
-                            required
-                            className="w-full text-xs"
-                          >
-                            <option value="">-- اختر المنتج --</option>
-                            {request.agreedProducts.map((p: any) => {
-                              const isSelectedElsewhere = offerLines.some(l => l.id !== line.id && l.productId === p.product_id);
-                              // Get product name from existing Odoo lines first, then provider_product_name
-                              const lineForProduct = request.offerLines?.find((ol: any) => ol.product_id === p.product_id);
-                              const displayName = lineForProduct?.name || p.provider_product_name || `منتج ${p.product_id}`;
-                              return (
-                                <option 
-                                  key={p.product_id} 
-                                  value={p.product_id}
-                                  disabled={isSelectedElsewhere}
-                                >
-                                  {displayName} (التكلفة: {p.cost_price})
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </div>
-                      )}
-
-                      {/* Row 2: Product Name, Product Code, Price */}
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                        <div className="input-group md:col-span-4">
-                          <label className="text-[10px]">اسم المنتج</label>
-                          <input
-                            type="text"
-                            value={line.productName}
-                            onChange={(e) => {
-                              const newLines = [...offerLines];
-                              newLines[index].productName = e.target.value;
-                              setOfferLines(newLines);
-                            }}
-                            placeholder="اسم المنتج"
-                            className="w-full text-xs"
-                            readOnly={!!matchedProduct}
-                          />
-                        </div>
-
-                        <div className="input-group md:col-span-3">
-                          <label className="text-[10px]">كود المنتج</label>
-                          <input
-                            type="text"
-                            value={line.productCode}
-                            onChange={(e) => {
-                              const newLines = [...offerLines];
-                              newLines[index].productCode = e.target.value;
-                              setOfferLines(newLines);
-                            }}
-                            placeholder="كود المنتج"
-                            className="w-full text-xs"
-                            readOnly={!!matchedProduct}
-                          />
-                        </div>
-
-                        <div className="input-group md:col-span-3">
-                          <label className="text-[10px]">السعر (ر.س)</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max={
-                              line.productId && request.agreedProducts
-                                ? request.agreedProducts.find((p: any) => p.product_id === line.productId)?.cost_price
-                                : undefined
-                            }
-                            required
-                            value={line.price}
-                            onChange={(e) => {
-                              const newLines = [...offerLines];
-                              newLines[index].price = e.target.value;
-                              setOfferLines(newLines);
-                            }}
-                            placeholder="مثال: 500"
-                            className="w-full text-xs"
-                          />
-                        </div>
-
-                        <div className="md:col-span-2 flex justify-end">
-                          {offerLines.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOfferLines(offerLines.filter(l => l.id !== line.id));
+                                setOfferLines(newLines);
                               }}
-                              className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-2 rounded-lg transition-colors text-xs"
-                              title="حذف البند"
+                              required
+                              className="w-full text-xs"
                             >
-                              حذف
-                            </button>
-                          )}
+                              <option value="">-- اختر المنتج --</option>
+                              {request.agreedProducts.map((p: any) => {
+                                const isSelectedElsewhere = offerLines.some(l => l.id !== line.id && l.productId === p.product_id);
+                                // Get product name from existing Odoo lines first, then provider_product_name
+                                const lineForProduct = request.offerLines?.find((ol: any) => ol.product_id === p.product_id);
+                                const displayName = lineForProduct?.name || p.provider_product_name || `منتج ${p.product_id}`;
+                                return (
+                                  <option
+                                    key={p.product_id}
+                                    value={p.product_id}
+                                    disabled={isSelectedElsewhere}
+                                  >
+                                    {displayName} (التكلفة: {p.cost_price})
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Row 2: Product Name, Product Code, Price */}
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                          <div className="input-group md:col-span-4">
+                            <label className="text-[10px]">اسم المنتج</label>
+                            <input
+                              type="text"
+                              value={line.productName}
+                              onChange={(e) => {
+                                const newLines = [...offerLines];
+                                newLines[index].productName = e.target.value;
+                                setOfferLines(newLines);
+                              }}
+                              placeholder="اسم المنتج"
+                              className="w-full text-xs"
+                              readOnly={!!matchedProduct}
+                            />
+                          </div>
+
+                          <div className="input-group md:col-span-3">
+                            <label className="text-[10px]">كود المنتج</label>
+                            <input
+                              type="text"
+                              value={line.productCode}
+                              onChange={(e) => {
+                                const newLines = [...offerLines];
+                                newLines[index].productCode = e.target.value;
+                                setOfferLines(newLines);
+                              }}
+                              placeholder="كود المنتج"
+                              className="w-full text-xs"
+                              readOnly={!!matchedProduct}
+                            />
+                          </div>
+
+                          <div className="input-group md:col-span-3">
+                            <label className="text-[10px] flex items-center gap-0.5">
+                              السعر (
+                              <SaudiRiyalIcon size={10} />
+                              )
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max={
+                                line.productId && request.agreedProducts
+                                  ? request.agreedProducts.find((p: any) => p.product_id === line.productId)?.cost_price
+                                  : undefined
+                              }
+                              required
+                              value={line.price}
+                              onChange={(e) => {
+                                const newLines = [...offerLines];
+                                newLines[index].price = e.target.value;
+                                setOfferLines(newLines);
+                              }}
+                              placeholder="مثال: 500"
+                              className="w-full text-xs"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2 flex justify-end">
+                            {offerLines.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOfferLines(offerLines.filter(l => l.id !== line.id));
+                                }}
+                                className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-2 rounded-lg transition-colors text-xs"
+                                title="حذف البند"
+                              >
+                                حذف
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
                     );
                   })}
-                  
+
                   <div className="flex justify-between items-center pt-2 px-2 text-sm">
                     <span className="font-bold text-slate-600 dark:text-slate-400">الإجمالي:</span>
-                    <span className="font-extrabold text-emerald-700 dark:text-emerald-400">
-                      {offerLines.reduce((acc, curr) => acc + (parseFloat(curr.price) || 0), 0).toFixed(2)} ر.س
+                    <span className="font-extrabold text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
+                      {offerLines.reduce((acc, curr) => acc + (parseFloat(curr.price) || 0), 0).toFixed(2)}
+                      <SaudiRiyalIcon size={12} />
                     </span>
                   </div>
                 </div>
@@ -700,8 +715,8 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                   <input
                     type="text"
                     placeholder="فترة التشغيل، التفاصيل، إلخ..."
-                    value={offerNotes}
-                    onChange={(e) => setOfferNotes(e.target.value)}
+                    value={providerNote}
+                    onChange={(e) => setProviderNote(e.target.value)}
                   />
                 </div>
 
