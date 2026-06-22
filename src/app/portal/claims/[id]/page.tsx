@@ -17,11 +17,13 @@ import {
   Receipt,
   CheckCircle2,
   Clock,
-  Loader2
+  Loader2,
+  Trash2,
+  Plus
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
-import { raisingClaimSchema } from "@/utils/validation";
+import { raisingClaimSchema, updateClaimSchema } from "@/utils/validation";
 import DatePicker from "@/components/ui/DatePicker";
 
 interface ClaimLine {
@@ -63,7 +65,7 @@ interface ClaimDetail {
   beneficiaryMobile: string;
   beneficiaryEmail: string;
   claimStatus: string;
-  editingReason: string;
+  updateClaimReason: string;
   subServiceType: string;
   requestDate: string;
   accountMoveDate: string;
@@ -82,18 +84,20 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [invoiceRef, setInvoiceRef] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
-  const [attachments, setAttachments] = useState<{ name: string; datas: string }[]>([]);
+  const [attachments, setAttachments] = useState<{ attachment_id?: number; name: string; datas?: string; url?: string }[]>([]);
   const [invoiceLines, setInvoiceLines] = useState<{ productId: number; priceUnit: string; name: string; qty: number }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [submittingInvoice, setSubmittingInvoice] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
+  const [isAddingLine, setIsAddingLine] = useState(false);
   const [selectedPreviewAtt, setSelectedPreviewAtt] = useState<{ url: string; name: string } | null>(null);
+  const isEditing = !!(claim && claim.invoices && claim.invoices.length > 0);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     setUploading(true);
     const files = Array.from(e.target.files);
-    const newAttachments: { name: string; datas: string }[] = [];
+    const newAttachments: { attachment_id?: number; name: string; datas: string; url?: string }[] = [];
 
     for (const file of files) {
       try {
@@ -121,23 +125,87 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
     setUploading(false);
   };
 
+  const handleStartEditInvoice = () => {
+    if (!claim || claim.invoices.length === 0) return;
+    const inv = claim.invoices[0];
+    setInvoiceRef(inv.ref || "");
+    setInvoiceDate(inv.invoice_date || "");
+    setAttachments(inv.attachments || []);
+
+    // مقارنة وجلب البنود: من الفاتورة إذا كان البند موجوداً، ومن بنود الخدمة إذا لم يكن موجوداً
+    const editLines = claim.lines.map((claimLine: any) => {
+      const matchedInvLine = inv.invoice_lines.find((il: any) => il.product_id === claimLine.product_id);
+      
+      if (matchedInvLine) {
+        // إذا كان البند موجوداً في الفاتورة، نجلبه من الفاتورة
+        return {
+          productId: matchedInvLine.product_id,
+          priceUnit: matchedInvLine.price_unit.toString(),
+          name: matchedInvLine.name,
+          qty: matchedInvLine.quantity, // الكمية من الفاتورة
+        };
+      } else {
+        // إذا لم يكن موجوداً، نجلبه من بنود الخدمة المتاحة (ويكون غير فعال تلقائياً لعدم وجود معرّفه في الـ selectedProductIds)
+        return {
+          productId: claimLine.product_id,
+          priceUnit: claimLine.price_unit.toString(),
+          name: claimLine.name,
+          qty: claimLine.product_qty, // الكمية من بنود الخدمة المتاحة
+        };
+      }
+    });
+
+    // تحديد البنود المرفقة بالفعل في الفاتورة فقط لتكون محددة (فعالة) تلقائياً
+    const editSelectedIds = inv.invoice_lines.map((il: any) => il.product_id);
+
+    setInvoiceLines(editLines);
+    setSelectedProductIds(editSelectedIds);
+    setIsAddingLine(false);
+    setShowInvoiceForm(true);
+  };
+
   const handleSubmitInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const activeLines = invoiceLines.filter(l => selectedProductIds.includes(l.productId));
+    const isEditing = claim && claim.invoices && claim.invoices.length > 0;
 
-    const result = raisingClaimSchema.safeParse({
-      ref: invoiceRef,
-      invoice_date: invoiceDate,
-      attachments,
-      invoice_lines: activeLines.map(l => ({
-        product_id: l.productId,
-        price_unit: parseFloat(l.priceUnit) || 0,
-      })),
-    });
+    let validationResult;
+    if (isEditing) {
+      const invoiceId = claim.invoices[0].invoice_id;
+      const payload = {
+        invoices: [
+          {
+            invoice_id: invoiceId,
+            ref: invoiceRef,
+            invoice_date: invoiceDate,
+            attachments: attachments.map(att => ({
+              attachment_id: att.attachment_id,
+              name: att.name,
+              datas: att.datas || "",
+            })),
+            invoice_lines: activeLines.map(l => ({
+              product_id: l.productId,
+              price_unit: parseFloat(l.priceUnit) || 0,
+            })),
+          }
+        ]
+      };
+      validationResult = updateClaimSchema.safeParse(payload);
+    } else {
+      validationResult = raisingClaimSchema.safeParse({
+        ref: invoiceRef,
+        invoice_date: invoiceDate,
+        attachments,
+        invoice_lines: activeLines.map(l => ({
+          product_id: l.productId,
+          price_unit: parseFloat(l.priceUnit) || 0,
+        })),
+      });
+    }
 
-    if (!result.success) {
-      toast.error(result.error.issues[0].message);
+    if (!validationResult.success) {
+      toast.error(validationResult.error.issues[0].message);
       return;
     }
 
@@ -152,34 +220,56 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
 
     try {
       setSubmittingInvoice(true);
+      const body = isEditing 
+        ? JSON.stringify({
+            invoices: [
+              {
+                invoice_id: claim.invoices[0].invoice_id,
+                ref: invoiceRef,
+                invoice_date: invoiceDate,
+                attachments: attachments.map(att => ({
+                  attachment_id: att.attachment_id,
+                  name: att.name,
+                  datas: att.datas || "",
+                })),
+                invoice_lines: activeLines.map(l => ({
+                  product_id: l.productId,
+                  price_unit: parseFloat(l.priceUnit),
+                })),
+              }
+            ]
+          })
+        : JSON.stringify({
+            ref: invoiceRef,
+            invoice_date: invoiceDate,
+            attachments,
+            invoice_lines: activeLines.map(l => ({
+              product_id: l.productId,
+              price_unit: parseFloat(l.priceUnit),
+            })),
+          });
+
       const res = await fetch(`/api/claims/${id}`, {
-        method: "POST",
+        method: isEditing ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ref: invoiceRef,
-          invoice_date: invoiceDate,
-          attachments,
-          invoice_lines: activeLines.map(l => ({
-            product_id: l.productId,
-            price_unit: parseFloat(l.priceUnit),
-          })),
-        }),
+        body,
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || "فشل رفع الفاتورة");
+        throw new Error(data.message || "فشل حفظ الفاتورة");
       }
 
-      toast.success("تم تقديم المطالبة ورفع الفاتورة بنجاح!");
+      toast.success(isEditing ? "تم تحديث المطالبة وتأكيد التعديل بنجاح!" : "تم تقديم المطالبة ورفع الفاتورة بنجاح!");
       setShowInvoiceForm(false);
       setInvoiceRef("");
+      setInvoiceDate("");
       setAttachments([]);
       loadClaimDetail();
     } catch (err: any) {
-      toast.error(err.message || "حدث خطأ أثناء رفع الفاتورة");
+      toast.error(err.message || "حدث خطأ أثناء حفظ الفاتورة");
     } finally {
       setSubmittingInvoice(false);
     }
@@ -285,13 +375,13 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
         {/* Claim Status Badge */}
         <div>
           {claim.claimStatus === "raising_the_claim" && (
-            <div className="flex items-center gap-1.5 rounded-2xl border border-amber-200 bg-amber-50/50 px-4 py-2 text-sm font-bold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/60">
+            <div className="flex items-center gap-1.5 rounded-2xl border border-emerald-200 bg-emerald-50/50 px-4 py-2 text-sm font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/60">
               <Clock size={16} />
               <span>تم رفع المطالبة</span>
             </div>
           )}
           {claim.claimStatus === "update_the_claim" && (
-            <div className="flex items-center gap-1.5 rounded-2xl border border-rose-200 bg-rose-50/50 px-4 py-2 text-sm font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/60">
+            <div className="flex items-center gap-1.5 rounded-2xl border border-amber-200 bg-amber-50/50 px-4 py-2 text-sm font-bold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/60">
               <AlertCircle size={16} />
               <span>تحديث المطالبة</span>
             </div>
@@ -312,12 +402,12 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
       </div>
 
       {/* Editing Reason Warning if editing is active */}
-      {claim.editingReason && (
-        <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/50 rounded-3xl p-4 flex gap-3 text-rose-800 dark:text-rose-300">
+      {claim.updateClaimReason && claim.claimStatus === "update_the_claim" && (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 rounded-3xl p-4 flex gap-3 text-amber-800 dark:text-amber-300">
           <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <h4 className="text-sm font-bold">سبب التعديل المطلوب:</h4>
-            <p className="text-xs opacity-90 leading-relaxed">{claim.editingReason}</p>
+            <p className="text-xs opacity-90 leading-relaxed">{claim.updateClaimReason}</p>
           </div>
         </div>
       )}
@@ -440,156 +530,237 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
               <h2 className="text-base font-extrabold text-emerald-950 dark:text-white">الفواتير والمستندات المرفوعة</h2>
             </div>
 
-            {claim.invoices.length === 0 ? (
+            {showInvoiceForm ? (
+              <form onSubmit={handleSubmitInvoice} noValidate className="space-y-4 border border-emerald-100 dark:border-emerald-900/50 rounded-2xl p-4 bg-emerald-50/30 dark:bg-emerald-950/20">
+                <div className="flex items-center justify-between border-b border-emerald-100 dark:border-emerald-900/50 pb-2">
+                  <span className="text-xs font-bold text-emerald-900 dark:text-emerald-300">
+                    {isEditing ? "تعديل تفاصيل الفاتورة والمطالبة" : "رفع تفاصيل الفاتورة والمطالبة"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="input-group">
+                    <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">رقم الفاتورة (المرجع)</label>
+                    <input
+                      type="text"
+                      placeholder="مثال: RS-0126"
+                      value={invoiceRef}
+                      onChange={(e) => setInvoiceRef(e.target.value)}
+                      className="w-full text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">تاريخ الفاتورة</label>
+                    <DatePicker
+                      value={invoiceDate}
+                      onChange={setInvoiceDate}
+                      placeholder="YYYY-MM-DD"
+                      maxDate={(() => {
+                        const d = new Date();
+                        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                      })()}
+                    />
+                  </div>
+                </div>
+
+                {/* Invoice lines based on claim lines */}
+                <div className="space-y-3 pt-2">
+                  <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300 block">بنود الفاتورة وقيمة كل بند:</label>
+                  
+                  {/* List of active lines */}
+                  <div className="space-y-3">
+                    {invoiceLines
+                      .filter(line => selectedProductIds.includes(line.productId))
+                      .map((line, index) => {
+                        const originalLine = claim.lines.find((l: any) => l.product_id === line.productId);
+                        // Find the original index of this line in the master invoiceLines array to update it correctly
+                        const masterIndex = invoiceLines.findIndex(l => l.productId === line.productId);
+                        
+                        return (
+                          <div key={line.productId} className="flex flex-col p-4 rounded-xl bg-white dark:bg-[#021b14] border border-emerald-50 dark:border-emerald-950/40 space-y-3 relative group">
+                            
+                            {/* Line header & Remove button */}
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-750 dark:text-slate-200">
+                                {line.name} <span className="text-slate-400 dark:text-slate-500 font-normal">({`×${line.qty}`})</span>
+                              </span>
+                              
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedProductIds(prev => prev.filter(id => id !== line.productId));
+                                }}
+                                className="text-rose-500 hover:text-rose-700 dark:text-rose-400/80 dark:hover:text-rose-350 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all flex items-center gap-1 text-[10px] font-bold"
+                                title="حذف البند من الفاتورة"
+                              >
+                                <Trash2 size={13} />
+                                <span>حذف</span>
+                              </button>
+                            </div>
+
+                            {/* Price input field */}
+                            <div className="input-group">
+                              <label className="text-[10px] flex items-center gap-0.5">
+                                سعر الوحدة (بحد أقصى: {originalLine?.price_unit}
+                                <SaudiRiyalIcon size={8} />)
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                max={originalLine?.price_unit}
+                                required
+                                value={line.priceUnit}
+                                onChange={(e) => {
+                                  const updated = [...invoiceLines];
+                                  updated[masterIndex].priceUnit = e.target.value;
+                                  setInvoiceLines(updated);
+                                }}
+                                className="w-full text-xs"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                      
+                    {/* If no lines are selected, show a helper message */}
+                    {selectedProductIds.length === 0 && (
+                      <div className="text-center py-8 border border-dashed border-emerald-100 dark:border-emerald-950/50 rounded-xl text-slate-400 dark:text-emerald-500/60 text-xs">
+                        لم يتم تحديد أي بنود للفاتورة بعد. انقر على الزر بالأسفل لإضافة بند.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Add line controls */}
+                  <div className="pt-2">
+                    {isAddingLine ? (
+                      <div className="flex flex-col p-4 rounded-xl bg-slate-50/50 dark:bg-emerald-950/10 border border-slate-100 dark:border-emerald-950/30 space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-550 dark:text-emerald-400">اختر بند الخدمة لإضافته:</label>
+                          <select
+                            defaultValue=""
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val) {
+                                setSelectedProductIds(prev => [...prev, parseInt(val)]);
+                                setIsAddingLine(false);
+                              }
+                            }}
+                            className="w-full text-xs h-10 rounded-xl border border-emerald-100 dark:border-emerald-950 bg-white dark:bg-[#021b14] px-3 text-slate-700 dark:text-white outline-none focus:border-emerald-500 transition-all cursor-pointer"
+                          >
+                            <option value="" disabled>اختر بنداً...</option>
+                            {claim.lines
+                              .filter((cl: any) => !selectedProductIds.includes(cl.product_id))
+                              .map((cl: any) => (
+                                <option key={cl.product_id} value={cl.product_id}>
+                                  {cl.name} (الكمية المتاحة: {cl.product_qty} | الحد الأقصى للسعر: {cl.price_unit})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingLine(false)}
+                            className="text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      claim.lines.filter((cl: any) => !selectedProductIds.includes(cl.product_id)).length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingLine(true)}
+                          className="w-full py-2.5 border border-dashed border-emerald-300 dark:border-emerald-800 hover:border-emerald-500 dark:hover:border-emerald-600 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-all cursor-pointer"
+                        >
+                          <Plus size={14} />
+                          <span>إضافة بند من الخدمات المتاحة للطلب</span>
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                {/* File attachments */}
+                <div className="space-y-2 pt-2">
+                  <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300 block">مرفقات الفاتورة (PDF أو صور):</label>
+                  <div className="flex items-center gap-3">
+                    <label className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 border border-emerald-100 dark:border-emerald-800 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 transition">
+                      <span>اختر ملفات...</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,image/*"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                    {uploading && <span className="text-xs text-slate-400">جاري قراءة الملفات...</span>}
+                  </div>
+
+                  {attachments.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                      {attachments.map((att, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-[#021b14] border border-emerald-50 dark:border-emerald-950/40 text-xs">
+                          <span className="truncate max-w-[150px] font-semibold text-[11px]">{att.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
+                            className="text-rose-500 hover:text-rose-700 font-bold shrink-0 ml-1 text-xs"
+                          >
+                            حذف
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInvoiceForm(false);
+                      if (isEditing) {
+                        setInvoiceRef("");
+                        setInvoiceDate("");
+                        setAttachments([]);
+                      }
+                    }}
+                    className="w-1/2 rounded-xl py-3 px-6 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors cursor-pointer"
+                  >
+                    {isEditing ? "إلغاء التعديل" : "إلغاء"}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingInvoice}
+                    className="w-1/2 rounded-xl py-3 px-6 text-xs font-bold text-white gradient-btn cursor-pointer"
+                  >
+                    {submittingInvoice 
+                      ? "جاري الحفظ..." 
+                      : isEditing 
+                        ? "تأكيد التعديل وإرسال" 
+                        : "إرسال المطالبة المالية ورفع الفاتورة"}
+                  </button>
+                </div>
+              </form>
+            ) : claim.invoices.length === 0 ? (
               <div className="space-y-4">
                 <div className="text-center py-6 text-xs text-slate-400">
                   لم يتم إرفاق أي فواتير أو مستندات مالية بعد.
                 </div>
-                {!showInvoiceForm ? (
-                  <div className="flex justify-center">
-                    <button
-                      type="button"
-                      onClick={() => setShowInvoiceForm(true)}
-                      className="rounded-xl py-3 px-6 text-xs font-bold text-white gradient-btn flex items-center gap-2"
-                    >
-                      <Receipt size={16} />
-                      <span>إضافة فاتورة ومطالبة مالية جديدة</span>
-                    </button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleSubmitInvoice} noValidate className="space-y-4 border border-emerald-100 dark:border-emerald-900/50 rounded-2xl p-4 bg-emerald-50/30 dark:bg-emerald-950/20">
-                    <div className="flex items-center justify-between border-b border-emerald-100 dark:border-emerald-900/50 pb-2">
-                      <span className="text-xs font-bold text-emerald-900 dark:text-emerald-300">رفع تفاصيل الفاتورة والمطالبة</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowInvoiceForm(false)}
-                        className="text-xs text-rose-600 hover:underline"
-                      >
-                        إلغاء
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="input-group">
-                        <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">رقم الفاتورة (المرجع)</label>
-                        <input
-                          type="text"
-                          placeholder="مثال: RS-0126"
-                          value={invoiceRef}
-                          onChange={(e) => setInvoiceRef(e.target.value)}
-                          className="w-full text-xs"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">تاريخ الفاتورة</label>
-                        <DatePicker
-                          value={invoiceDate}
-                          onChange={setInvoiceDate}
-                          placeholder="YYYY-MM-DD"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Invoice lines based on claim lines */}
-                    <div className="space-y-3 pt-2">
-                      <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300 block">بنود الفاتورة وقيمة كل بند:</label>
-                      <div className="space-y-3">
-                        {invoiceLines.map((line, index) => {
-                          const originalLine = claim.lines.find(l => l.product_id === line.productId);
-                          const isChecked = selectedProductIds.includes(line.productId);
-                          return (
-                            <div key={line.productId} className="flex flex-col p-4 rounded-xl bg-white dark:bg-[#021b14] border border-emerald-50 dark:border-emerald-950/40 space-y-2">
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  id={`prod-${line.productId}`}
-                                  checked={isChecked}
-                                  onChange={() => {
-                                    if (isChecked) {
-                                      setSelectedProductIds(prev => prev.filter(id => id !== line.productId));
-                                    } else {
-                                      setSelectedProductIds(prev => [...prev, line.productId]);
-                                    }
-                                  }}
-                                  className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
-                                />
-                                <label htmlFor={`prod-${line.productId}`} className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
-                                  تضمين البند: {line.name} (×{line.qty})
-                                </label>
-                              </div>
-
-                              {isChecked && (
-                                <div className="input-group">
-                                  <label className="text-[10px] flex items-center gap-0.5">
-                                    سعر الوحدة (بحد أقصى: {originalLine?.price_unit}
-                                    <SaudiRiyalIcon size={8} />)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0.01"
-                                    max={originalLine?.price_unit}
-                                    required
-                                    value={line.priceUnit}
-                                    onChange={(e) => {
-                                      const updated = [...invoiceLines];
-                                      updated[index].priceUnit = e.target.value;
-                                      setInvoiceLines(updated);
-                                    }}
-                                    className="w-full text-xs"
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* File attachments */}
-                    <div className="space-y-2 pt-2">
-                      <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300 block">مرفقات الفاتورة (PDF أو صور):</label>
-                      <div className="flex items-center gap-3">
-                        <label className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 border border-emerald-100 dark:border-emerald-800 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 transition">
-                          <span>اختر ملفات...</span>
-                          <input
-                            type="file"
-                            multiple
-                            accept=".pdf,image/*"
-                            onChange={handleFileChange}
-                            className="hidden"
-                          />
-                        </label>
-                        {uploading && <span className="text-xs text-slate-400">جاري قراءة الملفات...</span>}
-                      </div>
-
-                      {attachments.length > 0 && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-                          {attachments.map((att, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-[#021b14] border border-emerald-50 dark:border-emerald-950/40 text-xs">
-                              <span className="truncate max-w-[150px] font-semibold text-[11px]">{att.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
-                                className="text-rose-500 hover:text-rose-700 font-bold shrink-0 ml-1 text-xs"
-                              >
-                                حذف
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={submittingInvoice}
-                      className="w-full rounded-xl py-3 px-6 text-xs font-bold text-white gradient-btn mt-4"
-                    >
-                      {submittingInvoice ? "جاري رفع تفاصيل المطالبة..." : "إرسال المطالبة المالية ورفع الفاتورة"}
-                    </button>
-                  </form>
-                )}
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowInvoiceForm(true)}
+                    className="rounded-xl py-3 px-6 text-xs font-bold text-white gradient-btn flex items-center gap-2"
+                  >
+                    <Receipt size={16} />
+                    <span>إضافة فاتورة ومطالبة مالية جديدة</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-6">
@@ -647,6 +818,20 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                             );
                           })}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Edit Invoice Button if claimStatus is update_the_claim */}
+                    {claim.claimStatus === "update_the_claim" && (
+                      <div className="pt-4 border-t border-emerald-50 dark:border-emerald-950/25">
+                        <button
+                          type="button"
+                          onClick={handleStartEditInvoice}
+                          className="w-full rounded-xl py-2.5 px-4 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          <Receipt size={14} />
+                          <span>تعديل تفاصيل الفاتورة والمطالبة</span>
+                        </button>
                       </div>
                     )}
                   </div>

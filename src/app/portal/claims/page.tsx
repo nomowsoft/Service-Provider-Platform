@@ -24,6 +24,7 @@ interface ClaimItem {
   subServiceType: string;
   requestDate: string;
   charity: { name: string };
+  claimStatus?: string;
 }
 
 export default function ClaimsPage() {
@@ -34,6 +35,7 @@ export default function ClaimsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
 
   const loadData = useCallback(async () => {
     try {
@@ -58,6 +60,15 @@ export default function ClaimsPage() {
 
   // Filter claims during render
   const filteredClaims = claims.filter((c) => {
+    // Status Filter
+    if (selectedStatus !== "all") {
+      if (selectedStatus === "new") {
+        if (c.claimStatus) return false;
+      } else {
+        if (c.claimStatus !== selectedStatus) return false;
+      }
+    }
+
     // Search filter
     if (searchTerm.trim() !== "") {
       const term = searchTerm.toLowerCase();
@@ -102,7 +113,7 @@ export default function ClaimsPage() {
 
       {/* Filters Bar */}
       <div className="bg-white dark:bg-[#03251c] rounded-3xl p-5 border border-emerald-100/50 dark:border-emerald-950/40 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end animate-fadeIn">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end animate-fadeIn">
           {/* Search Field */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">البحث</label>
@@ -116,6 +127,22 @@ export default function ClaimsPage() {
               />
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-600/60 dark:text-emerald-400 h-4 w-4 pointer-events-none" />
             </div>
+          </div>
+
+          {/* Status Filter Dropdown */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">الحالة</label>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="w-full h-10 rounded-xl border border-emerald-100 dark:border-emerald-950 bg-emerald-50/30 dark:bg-[#021b14] px-4 text-xs text-emerald-950 dark:text-white outline-none focus:border-emerald-500 cursor-pointer transition-all"
+            >
+              <option value="all" className="bg-white dark:bg-[#03251c]">جميع الحالات ({claims.length})</option>
+              <option value="new" className="bg-white dark:bg-[#03251c]">جديدة ({claims.filter(c => !c.claimStatus).length})</option>
+              <option value="raising_the_claim" className="bg-white dark:bg-[#03251c]">تم رفع المطالبة ({claims.filter(c => c.claimStatus === "raising_the_claim").length})</option>
+              <option value="update_the_claim" className="bg-white dark:bg-[#03251c]">طلب تعديل ({claims.filter(c => c.claimStatus === "update_the_claim").length})</option>
+              <option value="claim_accepted" className="bg-white dark:bg-[#03251c]">تم قبول المطالبة ({claims.filter(c => c.claimStatus === "claim_accepted").length})</option>
+            </select>
           </div>
 
           {/* Start Date */}
@@ -140,13 +167,14 @@ export default function ClaimsPage() {
         </div>
 
         {/* Clear Filters Button */}
-        {(searchTerm || startDate || endDate) && (
+        {(searchTerm || startDate || endDate || selectedStatus !== "all") && (
           <div className="flex justify-end pt-1">
             <button
               onClick={() => {
                 setSearchTerm("");
                 setStartDate("");
                 setEndDate("");
+                setSelectedStatus("all");
               }}
               className="text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 transition-colors flex items-center gap-1.5"
             >
@@ -187,9 +215,7 @@ export default function ClaimsPage() {
                     {claim.subServiceType}
                   </h3>
                 </div>
-                <span className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/60">
-                  مطالبة مالية
-                </span>
+                {renderStatusBadge(claim.claimStatus)}
               </div>
 
               {/* Description */}
@@ -234,4 +260,33 @@ export default function ClaimsPage() {
       )}
     </div>
   );
+}
+
+function renderStatusBadge(status?: string) {
+  switch (status) {
+    case "raising_the_claim":
+      return (
+        <span className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/60">
+          تم رفع المطالبة
+        </span>
+      );
+    case "update_the_claim":
+      return (
+        <span className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-550/15 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/60">
+          طلب تعديل
+        </span>
+      );
+    case "claim_accepted":
+      return (
+        <span className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/60">
+          تم قبول المطالبة
+        </span>
+      );
+    default:
+      return (
+        <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-[#021b14] dark:text-slate-400 dark:border-slate-800">
+          جديدة
+        </span>
+      );
+  }
 }

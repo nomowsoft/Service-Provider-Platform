@@ -360,7 +360,6 @@ export async function fetchClaimsFromOdoo(session: SessionPayload) {
 
       const body = await res.json();
       const claims = body?.data?.raising_claim || [];
-
       for (const claim of claims) {
         apiClaims.push({
           id: `${claim.purchase_order_id}-${claim.request_number}`,
@@ -369,6 +368,7 @@ export async function fetchClaimsFromOdoo(session: SessionPayload) {
           providerName: claim.provider_name || "مزود خدمة خارجي",
           serviceCost: claim.service_cost || 0,
           subServiceType: claim.sub_service_type || "",
+          claimStatus: claim.claim_status,
           requestDate: claim.request_date
             ? new Date(claim.request_date).toISOString()
             : new Date().toISOString(),
@@ -423,7 +423,7 @@ export async function fetchClaimDetailFromOdoo(session: SessionPayload, purchase
           beneficiaryMobile: claim.beneficiary_mobile || "",
           beneficiaryEmail: claim.beneficiary_email || "",
           claimStatus: claim.claim_status,
-          editingReason: claim.editing_reason || "",
+          updateClaimReason: claim.update_claim_reason || "",
           subServiceType: claim.sub_service_type || "",
           requestDate: claim.request_date
             ? new Date(claim.request_date).toISOString()
@@ -491,6 +491,57 @@ export async function postClaimToOdoo(
     return { ok: true };
   } catch (err) {
     console.error("Odoo Claim submission error:", err);
+    return { ok: false, error: "حدث خطأ في الاتصال بالنظام الخارجي" };
+  }
+}
+
+/**
+ * POST to Odoo update claim API.
+ */
+export async function updateClaimInOdoo(
+  purchaseOrderId: number,
+  charity: SyncCharity,
+  params: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string }> {
+  const base = buildBaseUrl(charity.domain || DEFAULT_DOMAIN);
+  const url = `${base}api/cerp/update/claim/${purchaseOrderId}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        code: charity.apiCode || "",
+        token: charity.token,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "call",
+        params,
+      }),
+      signal: AbortSignal.timeout(15000), // File uploads might take longer
+    });
+
+    const body = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg = body?.message || body?.error?.message || res.statusText;
+      return { ok: false, error: msg || "فشل الاتصال بالنظام الخارجي" };
+    }
+
+    if (body?.error) {
+      const msg = body.error?.data?.message || body.error?.message || "خطأ في النظام الخارجي";
+      return { ok: false, error: msg };
+    }
+
+    const result = body?.result;
+    if (result && result.success === false) {
+      return { ok: false, error: result.message || "خطأ في النظام الخارجي" };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error("Odoo Claim update error:", err);
     return { ok: false, error: "حدث خطأ في الاتصال بالنظام الخارجي" };
   }
 }

@@ -8,6 +8,8 @@ interface DatePickerProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  minDate?: string; // YYYY-MM-DD
+  maxDate?: string; // YYYY-MM-DD
 }
 
 export default function DatePicker({
@@ -15,16 +17,35 @@ export default function DatePicker({
   onChange,
   placeholder = "اختر التاريخ",
   className = "",
+  minDate,
+  maxDate,
 }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Parse initial date or default to today
   const today = new Date();
+  const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const initialDate = value ? new Date(value) : today;
   
   const [currentMonth, setCurrentMonth] = useState(initialDate.getMonth());
   const [currentYear, setCurrentYear] = useState(initialDate.getFullYear());
+
+  // Normalize min/max dates
+  const minNormalized = minDate ? new Date(new Date(minDate).getFullYear(), new Date(minDate).getMonth(), new Date(minDate).getDate()) : null;
+  const maxNormalized = maxDate ? new Date(new Date(maxDate).getFullYear(), new Date(maxDate).getMonth(), new Date(maxDate).getDate()) : null;
+
+  // Check if prev/next month navigation should be disabled
+  const lastDayOfPrevMonth = new Date(currentYear, currentMonth, 0);
+  const isPrevMonthDisabled = minNormalized ? lastDayOfPrevMonth < minNormalized : false;
+
+  const firstDayOfNextMonth = new Date(currentYear, currentMonth + 1, 1);
+  const isNextMonthDisabled = maxNormalized ? firstDayOfNextMonth > maxNormalized : false;
+
+  const isTodayDisabled = !!(
+    (minNormalized && todayNormalized < minNormalized) ||
+    (maxNormalized && todayNormalized > maxNormalized)
+  );
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -68,6 +89,7 @@ export default function DatePicker({
 
   const handlePrevMonth = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isPrevMonthDisabled) return;
     if (currentMonth === 0) {
       setCurrentMonth(11);
       setCurrentYear((prev) => prev - 1);
@@ -78,6 +100,7 @@ export default function DatePicker({
 
   const handleNextMonth = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isNextMonthDisabled) return;
     if (currentMonth === 11) {
       setCurrentMonth(0);
       setCurrentYear((prev) => prev + 1);
@@ -94,6 +117,7 @@ export default function DatePicker({
 
   const handleToday = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isTodayDisabled) return;
     onChange(formatDateString(today));
     setCurrentMonth(today.getMonth());
     setCurrentYear(today.getFullYear());
@@ -151,8 +175,11 @@ export default function DatePicker({
           <div className="flex items-center justify-between px-4 py-3 bg-emerald-600 dark:bg-emerald-800 text-white">
             <button
               type="button"
+              disabled={isPrevMonthDisabled}
               onClick={handlePrevMonth}
-              className="p-1 rounded-full text-white/90 hover:text-white hover:bg-white/10 transition-all"
+              className={`p-1 rounded-full text-white/90 hover:text-white hover:bg-white/10 transition-all ${
+                isPrevMonthDisabled ? "opacity-30 cursor-not-allowed" : ""
+              }`}
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -161,8 +188,11 @@ export default function DatePicker({
             </span>
             <button
               type="button"
+              disabled={isNextMonthDisabled}
               onClick={handleNextMonth}
-              className="p-1 rounded-full text-white/90 hover:text-white hover:bg-white/10 transition-all"
+              className={`p-1 rounded-full text-white/90 hover:text-white hover:bg-white/10 transition-all ${
+                isNextMonthDisabled ? "opacity-30 cursor-not-allowed" : ""
+              }`}
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -186,6 +216,12 @@ export default function DatePicker({
                 return <div key={`empty-${idx}`} className="h-8 w-8" />;
               }
 
+              const cellDate = new Date(currentYear, currentMonth, day);
+              const isCellDisabled = !!(
+                (minNormalized && cellDate < minNormalized) ||
+                (maxNormalized && cellDate > maxNormalized)
+              );
+
               // Check if selected
               const isSelected =
                 value &&
@@ -203,15 +239,18 @@ export default function DatePicker({
                 <button
                   key={`day-${day}`}
                   type="button"
-                  onClick={() => handleSelectDay(day)}
+                  disabled={isCellDisabled}
+                  onClick={() => !isCellDisabled && handleSelectDay(day)}
                   className={`
-                    h-8 w-8 text-xs font-normal rounded-full flex items-center justify-center transition-all cursor-pointer
+                    h-8 w-8 text-xs font-normal rounded-full flex items-center justify-center transition-all
                     ${
-                      isSelected
-                        ? "bg-emerald-600 dark:bg-emerald-500 text-white font-medium shadow-[0_0_0_2px_#10b981]"
+                      isCellDisabled
+                        ? "text-slate-350 dark:text-emerald-950/30 opacity-40 cursor-not-allowed"
+                        : isSelected
+                        ? "bg-emerald-600 dark:bg-emerald-500 text-white font-medium shadow-[0_0_0_2px_#10b981] cursor-pointer"
                         : isToday
-                        ? "text-emerald-600 dark:text-emerald-400 font-bold"
-                        : "text-slate-700 dark:text-emerald-100 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                        ? "text-emerald-600 dark:text-emerald-400 font-bold cursor-pointer"
+                        : "text-slate-700 dark:text-emerald-100 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 cursor-pointer"
                     }
                   `}
                 >
@@ -224,8 +263,13 @@ export default function DatePicker({
           {/* Footer Today Button */}
           <button
             type="button"
+            disabled={isTodayDisabled}
             onClick={handleToday}
-            className="w-full py-2.5 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 border-t border-emerald-100 dark:border-emerald-950 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 transition-all cursor-pointer"
+            className={`w-full py-2.5 text-center text-xs font-semibold border-t border-emerald-100 dark:border-emerald-950 transition-all ${
+              isTodayDisabled
+                ? "text-slate-350 dark:text-emerald-950/30 opacity-40 cursor-not-allowed"
+                : "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 cursor-pointer"
+            }`}
           >
             Today
           </button>

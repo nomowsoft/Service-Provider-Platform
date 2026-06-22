@@ -58,6 +58,33 @@ export const raisingClaimSchema = z.object({
     })
   ).min(1, "يجب إرفاق ملف فاتورة/مستند مالي واحد على الأقل"),
 });
+export const updateClaimSchema = z.object({
+  invoices: z.array(
+    z.object({
+      invoice_id: z.coerce.number({ message: "معرف الفاتورة مطلوب" }),
+      ref: z.string({ message: "رقم الفاتورة (المرجع) مطلوب" })
+        .trim()
+        .min(1, "رقم الفاتورة (المرجع) مطلوب"),
+      invoice_date: z.string({ message: "تاريخ الفاتورة مطلوب" })
+        .trim()
+        .min(1, "تاريخ الفاتورة مطلوب")
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ الفاتورة يجب أن يكون بتنسيق YYYY-MM-DD"),
+      invoice_lines: z.array(
+        z.object({
+          product_id: z.coerce.number({ message: "يرجى تحديد المنتج للبند" }),
+          price_unit: z.coerce.number().positive({ message: "قيمة سعر البند يجب أن تكون أكبر من 0" }),
+        })
+      ).min(1, "يجب إضافة بند واحد على الأقل في الفاتورة"),
+      attachments: z.array(
+        z.object({
+          attachment_id: z.coerce.number().optional(),
+          name: z.string({ message: "اسم الملف المرفق مطلوب" }).min(1, "اسم الملف المرفق مطلوب"),
+          datas: z.string().optional().default(""),
+        })
+      ).min(1, "يجب إرفاق ملف فاتورة/مستند مالي واحد على الأقل"),
+    })
+  ).min(1, "يجب تحديد فاتورة واحدة على الأقل للتحديث"),
+});
 
 
 export const registerSchema = z.object({
