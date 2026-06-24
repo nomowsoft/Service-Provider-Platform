@@ -38,13 +38,7 @@ export async function GET(
 
     const { offer: fetchedOffer, agreedProducts, charity: matchedCharity } = result;
 
-    // Map Odoo state → local status
-    let localStatus = "RFQ";
-    if (fetchedOffer.offer_state === "approved") {
-      localStatus = "RAISING_CLAIM";
-    } else if (fetchedOffer.offer_state === "cancel" || fetchedOffer.offer_state === "cancel_done") {
-      localStatus = "CANCELLED";
-    }
+    const localStatus = fetchedOffer.offer_state || "draft";
 
     const matchedProvider = await resolveProvider(
       session,
@@ -58,7 +52,7 @@ export async function GET(
       beneficiaryName: fetchedOffer.beneficiary_name || "مستفيد خارجي",
       beneficiaryNationalId: fetchedOffer.beneficiary_mobile || "",
       status: localStatus,
-      serviceCost: 0,
+      serviceCost: fetchedOffer.service_cost || 0,
       charityContributionPercentage: 100,
       charityContributionValue: 0,
       beneficiaryContributionValue: 0,
@@ -76,6 +70,7 @@ export async function GET(
       agreedProducts,
       offerLines: fetchedOffer.lines || [],
       offerNotes: fetchedOffer.offer_notes || "",
+      providerNote: fetchedOffer.provider_note || "",
     };
 
     return NextResponse.json({ request: serviceRequest });
@@ -152,7 +147,7 @@ export async function POST(
       );
     }
 
-    const { lines, notes } = validation.data;
+    const { lines, provider_note } = validation.data;
 
     // Build Odoo order lines & validate prices
     const odooOrderLines: { product_id: number; price_unit: number }[] = [];
@@ -172,7 +167,7 @@ export async function POST(
         if (line.price > matchedProduct.cost_price) {
           return NextResponse.json(
             {
-              message: `سعر العرض لا يمكن أن يتجاوز سعر التكلفة المتفق عليه للمنتج (${matchedProduct.cost_price} ر.س)`,
+              message: `سعر العرض لا يمكن أن يتجاوز سعر التكلفة المتفق عليه للمنتج (${matchedProduct.cost_price})`,
             },
             { status: 400 }
           );
@@ -191,7 +186,11 @@ export async function POST(
     const postResult = await postOfferToOdoo(
       requestId,
       matchedCharity as any,
-      { offer_state: "draft", order_line: odooOrderLines }
+      { 
+        offer_state: "to approve", 
+        order_line: odooOrderLines,
+        provider_note: provider_note || ""
+      }
     );
 
     if (!postResult.ok) {
@@ -208,7 +207,7 @@ export async function POST(
       charityId: matchedCharity.id,
       charityName: matchedCharity.name,
       amountTotal,
-      notes: notes || null,
+      notes: provider_note || null,
       lines: odooOrderLines,
       status: "PENDING",
       submittedAt: new Date().toISOString(),

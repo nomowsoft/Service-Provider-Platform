@@ -531,7 +531,7 @@ export default function SettingsPage() {
                       {user?.role === "SERVICE_PROVIDER" ? "كود الربط لمزود الخدمة (apiCode)" : "المفتاح السري للربط (Secret API Key)"}
                     </label>
                     <div className="flex items-center gap-2 bg-slate-50 dark:bg-emerald-950/20 border border-slate-200 dark:border-emerald-950 rounded-xl px-4 py-3">
-                      <code className="text-xs font-mono flex-1 text-slate-700 dark:text-slate-300 overflow-x-auto select-all">{mockSecretKey}</code>
+                      <code className="text-xs flex-1 text-slate-700 dark:text-slate-300 overflow-x-auto select-all">{mockSecretKey}</code>
                       <button
                         onClick={() => copyToClipboard(mockSecretKey, "sec_key")}
                         className="text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-400 transition"
@@ -650,7 +650,7 @@ export default function SettingsPage() {
 
                 <div className="border border-slate-100 dark:border-emerald-950/50 rounded-2xl overflow-hidden bg-white dark:bg-[#03251c]/10">
                   <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-right text-xs">
+                    <table className="w-full border-collapse text-right text-xs whitespace-nowrap lg:whitespace-normal">
                       <thead>
                         <tr className="bg-slate-50 dark:bg-emerald-950/20 text-slate-500 font-bold border-b border-slate-100 dark:border-emerald-950/40">
                           <th
@@ -690,6 +690,7 @@ export default function SettingsPage() {
                           <th className="p-4">توكن الربط</th>
                           <th className="p-4">حالة الارتباط</th>
                           <th className="p-4">تاريخ الربط</th>
+                          <th></th>
                           <th className="p-4 text-center">الإجراءات</th>
                         </tr>
                       </thead>
@@ -703,11 +704,11 @@ export default function SettingsPage() {
                         ) : (
                           sortedCharities.map((item) => (
                             <tr key={item.id} className="border-b border-slate-100 dark:border-emerald-950/20 last:border-0 hover:bg-slate-50/50 dark:hover:bg-emerald-950/10 transition">
-                              <td className="p-4 font-mono font-bold text-slate-600 dark:text-slate-300">{item.code}</td>
+                              <td className="p-4 font-bold text-slate-600 dark:text-slate-300">{item.code}</td>
                               <td className="p-4 font-bold text-emerald-950 dark:text-white">{item.name}</td>
                               <td className="p-4">
                                 <div className="flex items-center gap-2 bg-slate-50 dark:bg-emerald-950/15 border border-slate-100 dark:border-emerald-950/40 px-2.5 py-1.5 rounded-lg w-fit">
-                                  <code className="font-mono text-[10px] text-slate-600 dark:text-slate-300 max-w-[150px] truncate select-all">{item.token}</code>
+                                  <code className="text-[10px] text-slate-600 dark:text-slate-300 max-w-[150px] truncate select-all">{item.token}</code>
                                   <button
                                     type="button"
                                     onClick={() => copyToClipboard(item.token, `tok_${item.id}`)}
@@ -746,25 +747,25 @@ export default function SettingsPage() {
                                 )}
                               </td>
                               <td className="p-4 text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                  {item.status === "REQUESTED" && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setSelectedRequest(item)}
-                                      className="bg-emerald-950 hover:bg-emerald-900 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition flex items-center gap-1"
-                                    >
-                                      عرض طلب الارتباط
-                                    </button>
-                                  )}
+                                {item.status === "REQUESTED" && (
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteCharity(item.id)}
-                                    className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 p-2 rounded-lg transition inline-flex items-center justify-center"
-                                    title="حذف الربط"
+                                    onClick={() => setSelectedRequest(item)}
+                                    className="bg-emerald-950 hover:bg-emerald-900 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition flex items-center gap-1"
                                   >
-                                    <Trash2 size={14} />
+                                    عرض طلب الارتباط
                                   </button>
-                                </div>
+                                )}
+                              </td>
+                              <td className="p-4 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCharity(item.id)}
+                                  className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 p-2 rounded-lg transition inline-flex items-center justify-center"
+                                  title="حذف الربط"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
                               </td>
                             </tr>
                           ))
@@ -817,13 +818,13 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">رقم الهاتف</label>
-                  <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
+                  <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200">
                     {selectedRequest.pendingPhone || "لا يوجد"}
                   </div>
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">الدومين (domain)</label>
-                  <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
+                  <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200">
                     {selectedRequest.pendingDomain || "لا يوجد"}
                   </div>
                 </div>

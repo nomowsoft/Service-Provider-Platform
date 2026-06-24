@@ -9,9 +9,13 @@ import {
   Calendar,
   Building,
   Activity,
-  ChevronRight
+  ChevronRight,
+  X
 } from "lucide-react";
 import toast from "react-hot-toast";
+import DatePicker from "@/components/ui/DatePicker";
+import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
+
 
 interface RequestItem {
   id: number;
@@ -39,25 +43,27 @@ export default function RequestsPage() {
 
   // Filter & Search states
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
-  // Sync activeTab with URL tab param
+  // Sync statusFilter with URL status param
   useEffect(() => {
-    const tabParam = searchParams?.get("tab");
-    if (tabParam === "RFQ" || tabParam === "CLAIMS" || tabParam === "COMPLETED" || tabParam === "PENDING") {
-      setActiveTab(tabParam);
+    const statusParam = searchParams?.get("status");
+    if (statusParam) {
+      setStatusFilter(statusParam);
     } else {
-      setActiveTab("ALL");
+      setStatusFilter("ALL");
     }
   }, [searchParams]);
 
-  const handleTabChange = (tabId: string) => {
-    setActiveTab(tabId);
+  const handleStatusChange = (status: string) => {
+    setStatusFilter(status);
     const params = new URLSearchParams(window.location.search);
-    if (tabId === "ALL") {
-      params.delete("tab");
+    if (status === "ALL") {
+      params.delete("status");
     } else {
-      params.set("tab", tabId);
+      params.set("status", status);
     }
     router.replace(`/portal/requests?${params.toString()}`);
   };
@@ -104,15 +110,25 @@ export default function RequestsPage() {
       if (!matchesSearch) return false;
     }
 
-    // Tab filter
-    if (activeTab === "RFQ") {
-      return r.status === "RFQ";
-    } else if (activeTab === "CLAIMS") {
-      return r.status === "RAISING_CLAIM" || r.status === "CLAIM_REVIEW";
-    } else if (activeTab === "COMPLETED") {
-      return r.status === "COMPLETED";
-    } else if (activeTab === "PENDING") {
-      return r.status !== "RFQ" && r.status !== "RAISING_CLAIM" && r.status !== "CLAIM_REVIEW" && r.status !== "COMPLETED";
+    // Status filter
+    if (statusFilter !== "ALL") {
+      if (r.status?.toLowerCase() !== statusFilter.toLowerCase()) return false;
+    }
+
+    // Date range filter - From Date
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const reqDate = new Date(r.createdAt);
+      if (reqDate < start) return false;
+    }
+
+    // Date range filter - To Date
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      const reqDate = new Date(r.createdAt);
+      if (reqDate > end) return false;
     }
 
     return true;
@@ -121,20 +137,34 @@ export default function RequestsPage() {
 
 
   const getStatusLabelAndStyle = (status: string) => {
-    switch (status) {
-      case "DRAFT":
-        return { label: "مسودة", bg: "bg-slate-50 text-slate-700 border-slate-200" };
-      case "RFQ":
+    const s = (status || "").toLowerCase();
+    switch (s) {
+      case "draft":
+        return { label: "مسودة عرض تسعير", bg: "bg-slate-50 text-slate-700 border-slate-200" };
+      case "sent":
+        return { label: "طلب تسعير مرسل", bg: "bg-blue-50 text-blue-700 border-blue-200" };
+      case "to approve":
+        return { label: "في انتظار الموافقة", bg: "bg-amber-50 text-amber-700 border-amber-200" };
+      case "purchase":
+        return { label: "أمر شراء", bg: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+      case "approved":
+        return { label: "معتمد من الجمعية", bg: "bg-teal-50 text-teal-700 border-teal-200" };
+      case "done":
+        return { label: "مكتمل / منتهي", bg: "bg-green-50 text-green-700 border-green-200" };
+      case "cancel":
+      case "cancel_done":
+        return { label: "ملغي", bg: "bg-rose-50 text-rose-700 border-rose-200" };
+      case "rfq":
         return { label: "طلب تسعير", bg: "bg-emerald-50 text-emerald-700 border-emerald-200" };
-      case "BENEFICIARY_CONTRIBUTION":
+      case "beneficiary_contribution":
         return { label: "مساهمة المستفيد", bg: "bg-sky-50 text-sky-700 border-sky-200" };
-      case "RAISING_CLAIM":
+      case "raising_claim":
         return { label: "رفع المطالبة", bg: "bg-amber-50 text-amber-700 border-amber-200" };
-      case "CLAIM_REVIEW":
+      case "claim_review":
         return { label: "مراجعة المطالبة", bg: "bg-teal-50 text-teal-700 border-teal-200" };
-      case "COMPLETED":
+      case "completed":
         return { label: "مكتمل", bg: "bg-green-50 text-green-700 border-green-200" };
-      case "CANCELLED":
+      case "cancelled":
         return { label: "ملغي", bg: "bg-rose-50 text-rose-700 border-rose-200" };
       default:
         return { label: status, bg: "bg-gray-50 text-gray-700 border-gray-200" };
@@ -153,42 +183,86 @@ export default function RequestsPage() {
 
       </div>
 
-      {/* Tabs and Search Grid */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-emerald-100 dark:border-emerald-950 pb-4">
-        {/* Navigation Tabs */}
-        <div className="flex flex-wrap gap-2">
-          {[
-            { id: "ALL", label: "جميع الطلبات" },
-            { id: "RFQ", label: "طلب عروض الأسعار (RFQ)" },
-            { id: "CLAIMS", label: "المطالبات المالية" },
-            { id: "COMPLETED", label: "الطلبات المكتملة" },
-            { id: "PENDING", label: "الطلبات الأخرى المعلقة" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                activeTab === tab.id
-                  ? "bg-[#064e3b] text-white shadow-sm"
-                  : "bg-white dark:bg-[#03251c] text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50/50"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+      {/* Filters Bar */}
+      <div className="bg-white dark:bg-[#03251c] rounded-3xl p-5 border border-emerald-100/50 dark:border-emerald-950/40 shadow-sm space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end animate-fadeIn">
+          {/* Search Field */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">البحث</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="البحث برقم الطلب أو اسم المستفيد..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full h-10 rounded-xl border border-emerald-100 dark:border-emerald-950 bg-emerald-50/30 dark:bg-[#021b14] pl-10 pr-4 text-xs text-emerald-950 dark:text-white outline-none focus:border-emerald-500 transition-all placeholder-emerald-600/40 dark:placeholder-emerald-400/40"
+              />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-600/60 dark:text-emerald-400 h-4 w-4 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Status Filter */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">الحالة</label>
+            <div className="relative">
+              <select
+                value={statusFilter}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="w-full h-10 rounded-xl border border-emerald-100 dark:border-emerald-950 bg-emerald-50/30 dark:bg-[#021b14] px-4 text-xs text-emerald-950 dark:text-white outline-none focus:border-emerald-500 cursor-pointer transition-all"
+              >
+                <option value="ALL" className="bg-white dark:bg-[#03251c]">جميع الحالات</option>
+                <option value="draft" className="bg-white dark:bg-[#03251c]">مسودة عرض تسعير</option>
+                <option value="to approve" className="bg-white dark:bg-[#03251c]">في انتظار الموافقة</option>
+                <option value="purchase" className="bg-white dark:bg-[#03251c]">أمر شراء</option>
+                <option value="cancel" className="bg-white dark:bg-[#03251c]">ملغي</option>
+                {/* <option value="sent" className="bg-white dark:bg-[#03251c]">طلب تسعير مرسل</option> */}
+                {/* <option value="approved" className="bg-white dark:bg-[#03251c]">معتمد</option>
+                <option value="done" className="bg-white dark:bg-[#03251c]">مكتمل / منتهي</option> */}
+              </select>
+            </div>
+          </div>
+
+          {/* Start Date */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">من تاريخ</label>
+            <DatePicker
+              value={startDate}
+              onChange={setStartDate}
+              placeholder="اختر تاريخ البداية"
+            />
+          </div>
+
+          {/* End Date */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">إلى تاريخ</label>
+            <DatePicker
+              value={endDate}
+              onChange={setEndDate}
+              placeholder="اختر تاريخ النهاية"
+            />
+          </div>
         </div>
 
-        {/* Search input group */}
-        <div className="relative w-full lg:max-w-xs">
-          <input
-            type="text"
-            placeholder="البحث برقم الطلب أو اسم المستفيد..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-xl border border-emerald-100 dark:border-emerald-950 bg-white dark:bg-[#03251c] pl-10 pr-4 py-2.5 text-xs text-emerald-950 dark:text-white outline-none focus:border-emerald-500"
-          />
-          <Search className="absolute left-3.5 top-3 text-emerald-600/60 dark:text-emerald-400 h-4 w-4" />
-        </div>
+        {/* Clear Filters Button (Shows only if any filter is active) */}
+        {(searchTerm || statusFilter !== "ALL" || startDate || endDate) && (
+          <div className="flex justify-end pt-1">
+            <button
+              onClick={() => {
+                setSearchTerm("");
+                setStatusFilter("ALL");
+                setStartDate("");
+                setEndDate("");
+                const params = new URLSearchParams(window.location.search);
+                params.delete("status");
+                router.replace(`/portal/requests?${params.toString()}`);
+              }}
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 transition-colors flex items-center gap-1.5"
+            >
+              <X size={14} />
+              <span>إعادة تعيين الفلاتر</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Requests Listings Grid */}
@@ -255,7 +329,14 @@ export default function RequestsPage() {
                   <div className="flex flex-col">
                     <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400 font-bold">التكلفة الإجمالية</span>
                     <span className="text-sm font-extrabold text-emerald-950 dark:text-emerald-100">
-                      {req.serviceCost > 0 ? `${req.serviceCost.toLocaleString()} ر.س` : "بانتظار العروض"}
+                      {req.serviceCost > 0 ? (
+                        <span className="inline-flex items-center gap-1">
+                          {req.serviceCost.toLocaleString()}
+                          <SaudiRiyalIcon size={10} />
+                        </span>
+                      ) : (
+                        "بانتظار العروض"
+                      )}
                     </span>
                   </div>
                   <Link

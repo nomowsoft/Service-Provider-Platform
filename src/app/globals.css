@@ -328,3 +328,21 @@ html.dark .input-group label {
   background: linear-gradient(135deg, #059669, #10b981);
   color: white;
 }
+
+/* ─── Date Input Styling ─── */
+input[type="date"],
+input[type="datetime-local"] {
+  color-scheme: light;
+}
+
+html.dark input[type="date"],
+html.dark input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  display: none !important;
+  -webkit-appearance: none;
+}
+

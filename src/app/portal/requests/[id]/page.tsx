@@ -2,16 +2,14 @@
 
 import { useState, useEffect, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  ArrowLeft, 
-  Calendar, 
-  Building, 
-  User, 
-  ShieldAlert, 
-  CheckCircle2, 
-  Coins, 
-  Calculator,
-  FileSpreadsheet,
+import {
+  ArrowLeft,
+  Calendar,
+  Building,
+  User,
+  ShieldAlert,
+  CheckCircle2,
+  Coins,
   AlertCircle,
   FileCheck2,
   Wrench,
@@ -19,6 +17,7 @@ import {
   ThumbsDown
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
 
 interface PriceOffer {
   id: number;
@@ -47,7 +46,7 @@ interface RequestDetail {
   description: string;
   createdAt: string;
   charityId: number;
-  charity: { 
+  charity: {
     name: string;
     token?: string;
   };
@@ -55,7 +54,9 @@ interface RequestDetail {
   serviceProvider?: { name: string } | null;
   priceOffers: PriceOffer[];
   agreedProducts?: any[];
-  offerLines?: { id: number; name: string; price_total: number; price_unit: number; product_id: number; product_qty: number }[];
+  offerLines?: { id: number; name: string; price_subtotal: number; price_unit: number; product_id: number; product_qty: number }[];
+  offerNotes?: string | null;
+  providerNote?: string | null;
 }
 
 interface SessionUser {
@@ -84,7 +85,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   const [session, setSession] = useState<SessionUser | null>(null);
 
   // Form states: Price Offer
-  const [offerNotes, setOfferNotes] = useState("");
+  const [providerNote, setProviderNote] = useState("");
   const [offerLines, setOfferLines] = useState<{ id: string; productId: number | ""; price: string; productName: string; productCode: string }[]>([
     { id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "" }
   ]);
@@ -136,7 +137,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             productCode: matchedProd?.provider_product_code || "",
           };
         }));
-        setOfferNotes(data.request.offerNotes || "");
+        setProviderNote(data.request.providerNote || "");
       } else if (sessionData?.user?.role === "SERVICE_PROVIDER") {
         // No existing lines, start with empty form
         setOfferLines([{ id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "" }]);
@@ -161,15 +162,39 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
     e.preventDefault();
     setOfferSubmitting(true);
 
-    const validLines = offerLines.filter(l => l.productId !== "" && parseFloat(l.price) > 0);
-    if (validLines.length === 0) {
-      toast.error("يرجى إدخال منتج واحد وسعر صحيح على الأقل");
+    if (offerLines.length === 0) {
+      toast.error("يرجى إضافة بند واحد على الأقل");
       setOfferSubmitting(false);
       return;
     }
 
+    for (const line of offerLines) {
+      if (!line.productId) {
+        toast.error("يرجى اختيار المنتج لجميع البنود المضافة");
+        setOfferSubmitting(false);
+        return;
+      }
+      const priceVal = parseFloat(line.price);
+      if (isNaN(priceVal) || priceVal <= 0) {
+        const matchedProd = request?.agreedProducts?.find((p: any) => p.product_id === Number(line.productId));
+        const lineForProduct = request?.offerLines?.find((ol: any) => ol.product_id === Number(line.productId));
+        const displayName = lineForProduct?.name || matchedProd?.provider_product_name || `البند المختار`;
+        toast.error(`يرجى إدخال سعر صحيح أكبر من الصفر للبند "${displayName}"`);
+        setOfferSubmitting(false);
+        return;
+      }
+      const matchedProduct = request?.agreedProducts?.find((p: any) => p.product_id === Number(line.productId));
+      if (matchedProduct && priceVal > matchedProduct.cost_price) {
+        const lineForProduct = request?.offerLines?.find((ol: any) => ol.product_id === matchedProduct.product_id);
+        const displayName = lineForProduct?.name || matchedProduct.provider_product_name || `منتج ${matchedProduct.product_id}`;
+        toast.error(`سعر البند "${displayName}" لا يمكن أن يتجاوز السعر المعتمد (${matchedProduct.cost_price})`);
+        setOfferSubmitting(false);
+        return;
+      }
+    }
+
     try {
-      const formattedLines = validLines.map(l => ({
+      const formattedLines = offerLines.map(l => ({
         productId: Number(l.productId),
         price: parseFloat(l.price)
       }));
@@ -177,9 +202,9 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
       const res = await fetch(`/api/requests/${id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          lines: formattedLines, 
-          notes: offerNotes
+        body: JSON.stringify({
+          lines: formattedLines,
+          provider_note: providerNote
         }),
       });
 
@@ -199,7 +224,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   // Select / Approve Price Offer
   const handleApproveOffer = async (offerId: number) => {
     if (!confirm("هل أنت متأكد من رغبتك في الموافقة على عرض السعر هذا وترسية الطلب عليه؟")) return;
-    
+
     if (!request) return;
     const selectedOffer = request.priceOffers.find((o) => o.id === offerId);
     if (!selectedOffer) {
@@ -216,7 +241,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
       const resOffer = await fetch(`/api/offers/${offerId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           action: "approve",
           code,
           token,
@@ -296,8 +321,8 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
       const res = await fetch(`/api/requests/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          status: approve ? "COMPLETED" : "RAISING_CLAIM" 
+        body: JSON.stringify({
+          status: approve ? "COMPLETED" : "RAISING_CLAIM"
         }),
       });
 
@@ -338,6 +363,64 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   const { role, provider } = session || {};
   const isOwnerProvider = request.serviceProviderId === provider?.id;
 
+  // Odoo status helper mapping
+  const getOdooStatusLabelAndStyle = (status: string) => {
+    const s = (status || "").toLowerCase();
+    switch (s) {
+      case "draft":
+        return { label: "مسودة عرض تسعير", bg: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-350 dark:border-slate-800" };
+      case "sent":
+        return { label: "طلب تسعير مرسل", bg: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-450 dark:border-blue-900/50" };
+      case "to approve":
+        return { label: "في انتظار الموافقة", bg: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-450 dark:border-amber-900/50" };
+      case "purchase":
+        return { label: "أمر شراء", bg: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-450 dark:border-emerald-900/50" };
+      case "approved":
+        return { label: "معتمد من الجمعية", bg: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/30 dark:text-teal-450 dark:border-teal-900/50" };
+      case "done":
+        return { label: "مكتمل / منتهي", bg: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-450 dark:border-green-900/50" };
+      case "cancel":
+      case "cancel_done":
+        return { label: "ملغي", bg: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-450 dark:border-rose-900/50" };
+      case "rfq":
+        return { label: "طلب تسعير", bg: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-450 dark:border-emerald-900/50" };
+      case "beneficiary_contribution":
+        return { label: "مساهمة المستفيد", bg: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-900/50" };
+      case "raising_claim":
+        return { label: "رفع المطالبة", bg: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/50" };
+      case "claim_review":
+        return { label: "مراجعة المطالبة", bg: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/30 dark:text-teal-400 dark:border-teal-900/50" };
+      case "completed":
+        return { label: "مكتمل", bg: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-900/50" };
+      case "cancelled":
+        return { label: "ملغي", bg: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/50" };
+      default:
+        return { label: status, bg: "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950/30 dark:text-gray-400 dark:border-gray-900/50" };
+    }
+  };
+
+  const normalizeStatus = (status: string) => {
+    const s = (status || "").toLowerCase();
+    if (s === "draft" || s === "sent" || s === "to_approve" || s === "rfq") {
+      return "RFQ";
+    }
+    if (s === "approved" || s === "raising_claim") {
+      return "RAISING_CLAIM";
+    }
+    if (s === "purchase" || s === "claim_review") {
+      return "CLAIM_REVIEW";
+    }
+    if (s === "done" || s === "completed") {
+      return "COMPLETED";
+    }
+    if (s === "cancel" || s === "cancel_done" || s === "cancelled") {
+      return "CANCELLED";
+    }
+    return "RFQ";
+  };
+
+  const localStatus = normalizeStatus(request.status);
+
   // Stages array for visual Odoo timeline
   const stages = [
     { key: "RFQ", label: "عرض السعر" },
@@ -350,7 +433,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
     return stages.findIndex(s => s.key === status);
   };
 
-  const currentStageIndex = getStageIndex(request.status);
+  const currentStageIndex = getStageIndex(localStatus);
 
   return (
     <div className="space-y-6">
@@ -362,31 +445,35 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
         >
           <ArrowLeft size={16} />
         </button>
-        <div>
-          <h1 className="text-xl font-extrabold text-emerald-950 dark:text-white">تفاصيل الطلب {request.name}</h1>
-          <p className="text-xs text-emerald-600/70 dark:text-emerald-400 mt-0.5">متابعة ومعالجة حالة الطلب والمطالبات المالية</p>
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-extrabold text-emerald-950 dark:text-white">تفاصيل الطلب {request.name}</h1>
+            <span className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-xs font-semibold ${getOdooStatusLabelAndStyle(request.status).bg}`}>
+              {getOdooStatusLabelAndStyle(request.status).label}
+            </span>
+          </div>
+          <p className="text-xs text-emerald-600/70 dark:text-emerald-400 mt-0.5 md:mt-0">متابعة ومعالجة حالة الطلب والمطالبات المالية في أودو</p>
         </div>
       </div>
 
       {/* Odoo Visual Step Tracker */}
-      <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50">
+      {/* <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-4">
           <span className="text-xs font-extrabold text-emerald-950 dark:text-white">حالة الطلب الحالية:</span>
           
           <div className="flex-1 flex flex-row items-center justify-start md:justify-end gap-1 sm:gap-2">
             {stages.map((stage, idx) => {
-              const isActive = request.status === stage.key;
+              const isActive = localStatus === stage.key;
               const isPast = idx < currentStageIndex;
               return (
                 <div key={stage.key} className="flex items-center">
-                  <div 
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all border ${
-                      isActive 
+                  <div
+                    className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all border ${isActive
                         ? "bg-[#064e3b] text-white border-emerald-950 ring-4 ring-emerald-500/20"
-                        : isPast 
+                        : isPast
                           ? "bg-emerald-550/20 text-emerald-700 dark:text-emerald-400 border-emerald-200"
                           : "bg-slate-100 dark:bg-[#03251c] text-slate-400 dark:text-slate-600 border-slate-200 dark:border-emerald-950"
-                    }`}
+                      }`}
                   >
                     {stage.label}
                   </div>
@@ -398,13 +485,13 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             })}
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Main content columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+      <div className="space-y-6">
+
         {/* Left Column: Core Request Information */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
           <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 space-y-6">
             <h2 className="text-base font-extrabold text-emerald-950 dark:text-white border-b border-emerald-50 dark:border-emerald-950 pb-3">
               البيانات العامة للطلب
@@ -454,11 +541,19 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
 
-            <div className="border-t border-emerald-50 dark:border-emerald-950 pt-4 space-y-2">
-              <span className="text-xs font-bold text-slate-500">تفاصيل الخدمة الطبية المطلوبة:</span>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-[#03251c]/30 rounded-2xl p-4">
-                {request.description}
-              </p>
+            <div className="border-t border-emerald-50 dark:border-emerald-950 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-500">تفاصيل الخدمة الطبية المطلوبة:</span>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-[#03251c]/30 rounded-2xl p-4 min-h-[80px]">
+                  {request.description}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-500">ملاحظات الطلب:</span>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-[#03251c]/30 rounded-2xl p-4 min-h-[80px]">
+                  {request.offerNotes || "لا يوجد ملاحظات للطلب"}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -469,8 +564,8 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             </h2>
 
             {/* A: Form for Service Provider in RFQ stage */}
-            {role === "SERVICE_PROVIDER" && request.status === "RFQ" && (
-              <form onSubmit={handleSubmitOffer} className="space-y-4">
+            {role === "SERVICE_PROVIDER" && localStatus === "RFQ" && (
+              <form onSubmit={handleSubmitOffer} noValidate className="space-y-4">
                 <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-4 border border-emerald-100/30 flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300">
                   <AlertCircle size={16} />
                   <span>يمكنك تقديم سعر عرض لهذه الخدمة الطبية كشريك مسجل. يرجى إدخال التكلفة الإجمالية بدقة.</span>
@@ -498,138 +593,138 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                   {offerLines.map((line, index) => {
                     const matchedProduct = request.agreedProducts?.find((p: any) => p.product_id === line.productId);
                     return (
-                    <div key={line.id} className="bg-white dark:bg-[#03251c] p-4 rounded-xl shadow-sm border border-emerald-50 dark:border-emerald-900/30 space-y-3">
-                      {/* Row 1: Product selector */}
-                      {request.agreedProducts && request.agreedProducts.length > 0 && (
-                        <div className="input-group">
-                          <label className="text-[10px]">المنتج / الخدمة</label>
-                          <select 
-                            value={line.productId}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const numVal = val ? Number(val) : "";
-                              const newLines = [...offerLines];
-                              newLines[index].productId = numVal;
-                              
-                              if (numVal) {
-                                const prod = request.agreedProducts?.find((p: any) => p.product_id === numVal);
-                                // Look up the product name from existing offerLines data (Odoo line name)
-                                const existingLine = request.offerLines?.find((ol: any) => ol.product_id === numVal);
-                                if (prod) {
-                                  newLines[index].price = prod.cost_price.toString();
-                                  newLines[index].productName = existingLine?.name || prod.provider_product_name || "";
-                                  newLines[index].productCode = prod.provider_product_code || "";
+                      <div key={line.id} className="bg-white dark:bg-[#03251c] p-4 rounded-xl shadow-sm border border-emerald-50 dark:border-emerald-900/30 space-y-3">
+                        {/* Row 1: Product selector */}
+                        {request.agreedProducts && request.agreedProducts.length > 0 && (
+                          <div className="input-group">
+                            <label className="text-[10px]">المنتج / الخدمة</label>
+                            <select
+                              value={line.productId}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const numVal = val ? Number(val) : "";
+                                const newLines = [...offerLines];
+                                newLines[index].productId = numVal;
+
+                                if (numVal) {
+                                  const prod = request.agreedProducts?.find((p: any) => p.product_id === numVal);
+                                  // Look up the product name from existing offerLines data (Odoo line name)
+                                  const existingLine = request.offerLines?.find((ol: any) => ol.product_id === numVal);
+                                  if (prod) {
+                                    newLines[index].price = prod.cost_price.toString();
+                                    newLines[index].productName = existingLine?.name || prod.provider_product_name || "";
+                                    newLines[index].productCode = prod.provider_product_code || "";
+                                  }
+                                } else {
+                                  newLines[index].price = "";
+                                  newLines[index].productName = "";
+                                  newLines[index].productCode = "";
                                 }
-                              } else {
-                                newLines[index].price = "";
-                                newLines[index].productName = "";
-                                newLines[index].productCode = "";
-                              }
-                              setOfferLines(newLines);
-                            }}
-                            required
-                            className="w-full text-xs"
-                          >
-                            <option value="">-- اختر المنتج --</option>
-                            {request.agreedProducts.map((p: any) => {
-                              const isSelectedElsewhere = offerLines.some(l => l.id !== line.id && l.productId === p.product_id);
-                              // Get product name from existing Odoo lines first, then provider_product_name
-                              const lineForProduct = request.offerLines?.find((ol: any) => ol.product_id === p.product_id);
-                              const displayName = lineForProduct?.name || p.provider_product_name || `منتج ${p.product_id}`;
-                              return (
-                                <option 
-                                  key={p.product_id} 
-                                  value={p.product_id}
-                                  disabled={isSelectedElsewhere}
-                                >
-                                  {displayName} (التكلفة: {p.cost_price})
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </div>
-                      )}
-
-                      {/* Row 2: Product Name, Product Code, Price */}
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                        <div className="input-group md:col-span-4">
-                          <label className="text-[10px]">اسم المنتج</label>
-                          <input
-                            type="text"
-                            value={line.productName}
-                            onChange={(e) => {
-                              const newLines = [...offerLines];
-                              newLines[index].productName = e.target.value;
-                              setOfferLines(newLines);
-                            }}
-                            placeholder="اسم المنتج"
-                            className="w-full text-xs"
-                            readOnly={!!matchedProduct}
-                          />
-                        </div>
-
-                        <div className="input-group md:col-span-3">
-                          <label className="text-[10px]">كود المنتج</label>
-                          <input
-                            type="text"
-                            value={line.productCode}
-                            onChange={(e) => {
-                              const newLines = [...offerLines];
-                              newLines[index].productCode = e.target.value;
-                              setOfferLines(newLines);
-                            }}
-                            placeholder="كود المنتج"
-                            className="w-full text-xs"
-                            readOnly={!!matchedProduct}
-                          />
-                        </div>
-
-                        <div className="input-group md:col-span-3">
-                          <label className="text-[10px]">السعر (ر.س)</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max={
-                              line.productId && request.agreedProducts
-                                ? request.agreedProducts.find((p: any) => p.product_id === line.productId)?.cost_price
-                                : undefined
-                            }
-                            required
-                            value={line.price}
-                            onChange={(e) => {
-                              const newLines = [...offerLines];
-                              newLines[index].price = e.target.value;
-                              setOfferLines(newLines);
-                            }}
-                            placeholder="مثال: 500"
-                            className="w-full text-xs"
-                          />
-                        </div>
-
-                        <div className="md:col-span-2 flex justify-end">
-                          {offerLines.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOfferLines(offerLines.filter(l => l.id !== line.id));
+                                setOfferLines(newLines);
                               }}
-                              className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-2 rounded-lg transition-colors text-xs"
-                              title="حذف البند"
+                              required
+                              className="w-full text-xs"
                             >
-                              حذف
-                            </button>
-                          )}
+                              <option value="">-- اختر المنتج --</option>
+                              {request.agreedProducts.map((p: any) => {
+                                const isSelectedElsewhere = offerLines.some(l => l.id !== line.id && l.productId === p.product_id);
+                                // Get product name from existing Odoo lines first, then provider_product_name
+                                const lineForProduct = request.offerLines?.find((ol: any) => ol.product_id === p.product_id);
+                                const displayName = lineForProduct?.name || p.provider_product_name || `منتج ${p.product_id}`;
+                                return (
+                                  <option
+                                    key={p.product_id}
+                                    value={p.product_id}
+                                    disabled={isSelectedElsewhere}
+                                  >
+                                    {displayName} (التكلفة: {p.cost_price})
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Row 2: Product Name, Product Code, Price */}
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                          <div className="input-group md:col-span-4">
+                            <label className="text-[10px]">اسم المنتج</label>
+                            <input
+                              type="text"
+                              value={line.productName}
+                              onChange={(e) => {
+                                const newLines = [...offerLines];
+                                newLines[index].productName = e.target.value;
+                                setOfferLines(newLines);
+                              }}
+                              placeholder="اسم المنتج"
+                              className="w-full text-xs"
+                              readOnly={!!matchedProduct}
+                            />
+                          </div>
+
+                          <div className="input-group md:col-span-3">
+                            <label className="text-[10px]">كود المنتج</label>
+                            <input
+                              type="text"
+                              value={line.productCode}
+                              onChange={(e) => {
+                                const newLines = [...offerLines];
+                                newLines[index].productCode = e.target.value;
+                                setOfferLines(newLines);
+                              }}
+                              placeholder="كود المنتج"
+                              className="w-full text-xs"
+                              readOnly={!!matchedProduct}
+                            />
+                          </div>
+
+                          <div className="input-group md:col-span-3">
+                            <label className="text-[10px] flex items-center gap-0.5">
+                              السعر (بحد أقصى: {matchedProduct?.cost_price || 0}
+                              <SaudiRiyalIcon size={8} />)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max={matchedProduct?.cost_price}
+                              required
+                              value={line.price}
+                              onChange={(e) => {
+                                const newLines = [...offerLines];
+                                newLines[index].price = e.target.value;
+                                setOfferLines(newLines);
+                              }}
+                              placeholder="مثال: 500"
+                              className="w-full text-xs"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2 flex justify-end">
+                            {offerLines.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOfferLines(offerLines.filter(l => l.id !== line.id));
+                                }}
+                                className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-2 rounded-lg transition-colors text-xs"
+                                title="حذف البند"
+                              >
+                                حذف
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
                     );
                   })}
-                  
+
                   <div className="flex justify-between items-center pt-2 px-2 text-sm">
                     <span className="font-bold text-slate-600 dark:text-slate-400">الإجمالي:</span>
-                    <span className="font-extrabold text-emerald-700 dark:text-emerald-400">
-                      {offerLines.reduce((acc, curr) => acc + (parseFloat(curr.price) || 0), 0).toFixed(2)} ر.س
+                    <span className="font-extrabold text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
+                      {offerLines.reduce((acc, curr) => acc + (parseFloat(curr.price) || 0), 0).toFixed(2)}
+                      <SaudiRiyalIcon size={12} />
                     </span>
                   </div>
                 </div>
@@ -639,8 +734,8 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                   <input
                     type="text"
                     placeholder="فترة التشغيل، التفاصيل، إلخ..."
-                    value={offerNotes}
-                    onChange={(e) => setOfferNotes(e.target.value)}
+                    value={providerNote}
+                    onChange={(e) => setProviderNote(e.target.value)}
                   />
                 </div>
 
@@ -655,7 +750,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             )}
 
             {/* B: Form for Service Provider in RAISING_CLAIM stage */}
-            {role === "SERVICE_PROVIDER" && request.status === "RAISING_CLAIM" && isOwnerProvider && (
+            {role === "SERVICE_PROVIDER" && localStatus === "RAISING_CLAIM" && isOwnerProvider && (
               <form onSubmit={handleSubmitClaim} className="space-y-4">
                 <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-4 border border-emerald-100/30 flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300">
                   <FileCheck2 size={18} />
@@ -681,7 +776,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             )}
 
             {/* C: Form for Charity Staff / Admin to review a submitted financial claim */}
-            {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && request.status === "CLAIM_REVIEW" && (
+            {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && localStatus === "CLAIM_REVIEW" && (
               <div className="space-y-4">
                 <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 p-4 border border-amber-100/30 flex items-center gap-3 text-xs text-amber-800 dark:text-amber-300">
                   <Coins size={18} />
@@ -711,32 +806,32 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             )}
 
             {/* D: General statuses where no actions are pending */}
-            {request.status === "COMPLETED" && (
+            {localStatus === "COMPLETED" && (
               <div className="rounded-2xl bg-green-50 dark:bg-green-950/40 p-5 border border-green-100/30 flex items-center gap-3 text-sm text-green-800 dark:text-green-300 font-semibold">
                 <CheckCircle2 size={20} className="text-green-600" />
                 <span>تم اكتمال هذا الطلب وإغلاقه وصرف المستحقات بنجاح!</span>
               </div>
             )}
 
-            {role === "SERVICE_PROVIDER" && request.status === "RAISING_CLAIM" && !isOwnerProvider && (
+            {role === "SERVICE_PROVIDER" && localStatus === "RAISING_CLAIM" && !isOwnerProvider && (
               <div className="rounded-2xl bg-slate-50 dark:bg-[#03251c]/30 p-4 text-xs text-slate-500">
                 تمت ترسية هذا الطلب على مزود خدمة آخر.
               </div>
             )}
 
-            {role === "SERVICE_PROVIDER" && request.status === "CLAIM_REVIEW" && isOwnerProvider && (
+            {role === "SERVICE_PROVIDER" && localStatus === "CLAIM_REVIEW" && isOwnerProvider && (
               <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-4 text-xs text-emerald-800 dark:text-emerald-300 font-medium">
                 تم تقديم مطالبتك المالية بنجاح. يرجى الانتظار لحين قيام ممثلي الجمعية بمراجعة المستندات والصرف.
               </div>
             )}
 
-            {role === "SERVICE_PROVIDER" && request.status === "CLAIM_REVIEW" && !isOwnerProvider && (
+            {role === "SERVICE_PROVIDER" && localStatus === "CLAIM_REVIEW" && !isOwnerProvider && (
               <div className="rounded-2xl bg-slate-50 dark:bg-[#03251c]/30 p-4 text-xs text-slate-500">
                 تمت ترسية هذا الطلب على مزود خدمة آخر وهو في مرحلة المراجعة المالية حالياً.
               </div>
             )}
 
-            {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && request.status === "RAISING_CLAIM" && (
+            {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && localStatus === "RAISING_CLAIM" && (
               <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-5 border border-emerald-100/30 flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300 font-medium">
                 <Wrench size={18} />
                 <span>الطلب قيد العمل والتشغيل حالياً من قبل مزود الخدمة ({request.serviceProvider?.name}). بانتظار قيام المزود برفع المطالبة المالية للصرف.</span>
@@ -745,128 +840,6 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        {/* Right Column: Financial Split Calculator & Offers List */}
-        <div className="space-y-6">
-          
-          {/* Split contribution box */}
-          <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 space-y-5">
-            <div className="flex items-center gap-2 border-b border-emerald-50 dark:border-emerald-950 pb-3">
-              <Calculator className="text-emerald-700" size={18} />
-              <h2 className="text-base font-extrabold text-emerald-950 dark:text-white">مساهمات سداد التكلفة</h2>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-                <span>التكلفة الإجمالية:</span>
-                <span className="text-sm font-extrabold text-emerald-950 dark:text-white">
-                  {request.serviceCost > 0 ? `${request.serviceCost.toLocaleString()} ر.س` : "لم تسعر بعد"}
-                </span>
-              </div>
-
-              <div className="border-t border-dashed border-emerald-50 dark:border-emerald-950 pt-3 space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500 font-medium">حصة الجمعية الأهلية ({request.charityContributionPercentage}%):</span>
-                  <span className="font-bold text-emerald-800 dark:text-emerald-300">
-                    {request.serviceCost > 0 ? `${request.charityContributionValue.toLocaleString()} ر.س` : "-"}
-                  </span>
-                </div>
-
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500 font-medium">مساهمة المستفيد (قيمة ثابتة):</span>
-                  <span className="font-bold text-slate-700 dark:text-slate-300">
-                    {request.serviceCost > 0 ? `${request.beneficiaryContributionValue.toLocaleString()} ر.س` : `${request.beneficiaryContributionValue.toLocaleString()} ر.س`}
-                  </span>
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-3.5 border border-emerald-100/20 text-[10px] leading-relaxed text-emerald-800 dark:text-emerald-300">
-                <span className="font-bold block mb-0.5">توضيح طريقة التوزيع:</span>
-                يقوم المستفيد بدفع مساهمة مقطوعة ثابتة وقدرها ({request.beneficiaryContributionValue} ر.س)، وتتكفل الجمعية بنسبة ({request.charityContributionPercentage}%) من الجزء المتبقي من التكلفة المعتمدة.
-              </div>
-            </div>
-          </div>
-
-          {/* Price Offers List (visible to Charity Staff / Admin for decision, or to own provider for status check) */}
-          <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 space-y-4">
-            <div className="flex items-center gap-2 border-b border-emerald-50 dark:border-emerald-950 pb-3">
-              <FileSpreadsheet className="text-emerald-700" size={18} />
-              <h2 className="text-base font-extrabold text-emerald-950 dark:text-white">عروض الأسعار المقدمة</h2>
-            </div>
-
-            {request.priceOffers.length === 0 ? (
-              <div className="text-center py-6 text-slate-400 text-xs border border-dashed border-emerald-50 dark:border-emerald-950 rounded-2xl">
-                لا توجد عروض أسعار مقدمة حالياً.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {request.priceOffers.map((offer) => {
-                  const isOwnOffer = provider?.id === offer.provider.id;
-                  
-                  return (
-                    <div 
-                      key={offer.id} 
-                      className={`border rounded-2xl p-4 space-y-3 transition ${
-                        offer.status === "APPROVED"
-                          ? "bg-green-500/5 border-green-500/30"
-                          : offer.status === "REJECTED"
-                            ? "bg-rose-500/5 border-rose-500/10 opacity-70"
-                            : "bg-white dark:bg-[#03251c]/30 border-emerald-100 dark:border-emerald-950"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-emerald-950 dark:text-white flex items-center gap-1">
-                            {offer.provider.name}
-                            {isOwnOffer && (
-                              <span className="bg-emerald-500 text-white rounded px-1.5 py-0.5 text-[8px]">
-                                عرضك
-                              </span>
-                            )}
-                          </span>
-                          <span className="text-[10px] text-slate-500 mt-0.5">
-                            {new Date(offer.createdAt).toLocaleDateString("ar-SA")}
-                          </span>
-                        </div>
-                        <span className="text-sm font-extrabold text-emerald-950 dark:text-emerald-100">
-                          {offer.amountTotal.toLocaleString()} ر.س
-                        </span>
-                      </div>
-
-                      {offer.notes && (
-                        <p className="text-[11px] text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-[#03251c]/50 p-2 rounded-xl">
-                          {offer.notes}
-                        </p>
-                      )}
-
-                      <div className="flex items-center justify-between border-t border-emerald-50/50 dark:border-emerald-950/40 pt-2.5">
-                        <span className={`text-[10px] font-bold ${
-                          offer.status === "APPROVED" 
-                            ? "text-green-600" 
-                            : offer.status === "REJECTED" 
-                              ? "text-rose-500" 
-                              : "text-amber-500"
-                        }`}>
-                          الحالة: {offer.status === "APPROVED" ? "مقبول" : offer.status === "REJECTED" ? "مرفوض" : "معلق"}
-                        </span>
-
-                        {/* Decision button for Charity / Admin */}
-                        {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && request.status === "RFQ" && offer.status === "PENDING" && (
-                          <button
-                            onClick={() => handleApproveOffer(offer.id)}
-                            disabled={actionLoading}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-xl px-3 py-1.5 shadow transition"
-                          >
-                            اعتماد وترسية
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

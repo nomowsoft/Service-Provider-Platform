@@ -12,7 +12,8 @@ import {
   X, 
   ShieldCheck,
   Building,
-  Wrench
+  Wrench,
+  Coins
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -41,9 +42,14 @@ export default function Sidebar({ user }: SidebarProps) {
       icon: LayoutDashboard,
     },
     {
-      name: "إدارة الطلبات",
+      name: "طلبات عروض الأسعار",
       href: "/portal/requests",
       icon: FileText,
+    },
+    {
+      name: "طلبات المطالبة المالية",
+      href: "/portal/claims",
+      icon: Coins,
     },
     ...(user.role === "SUPER_ADMIN" ? [
       {

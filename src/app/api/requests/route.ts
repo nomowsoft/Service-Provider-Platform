@@ -13,15 +13,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "غير مصرح" }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const statusFilter = searchParams.get("status");
-
-    let apiRequests: any[] = [];
-
-    if (!statusFilter || statusFilter === "RFQ") {
-      apiRequests = await fetchRFQsFromOdoo(session);
-    }
-    console.log(apiRequests);
+    const apiRequests = await fetchRFQsFromOdoo(session);
     return NextResponse.json({ requests: apiRequests });
   } catch (error) {
     return NextResponse.json(

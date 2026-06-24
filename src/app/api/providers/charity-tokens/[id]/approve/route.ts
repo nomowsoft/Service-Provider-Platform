@@ -91,11 +91,12 @@ export async function POST(
     try {
       const response = await fetch(targetUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token: charity.token,
-          code: providerApiCode,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          "code": providerApiCode,
+          "token": charity.token || "",
+        },
+        body: JSON.stringify({}),
       });
       if (!response.ok) {
         return NextResponse.json(

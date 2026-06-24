@@ -260,14 +260,6 @@ export async function fetchRFQsFromOdoo(session: SessionPayload) {
       const offers = body?.data?.offers || [];
 
       const detailPromises = offers.map(async (offer: any) => {
-        if (
-          offer.offer_state === "approved" ||
-          offer.offer_state === "cancel" ||
-          offer.offer_state === "cancel_done"
-        ) {
-          return null;
-        }
-
         let matchedProvider = null;
         if (session.role === "SERVICE_PROVIDER" && session.providerId) {
           matchedProvider = providers.find((p) => String(p.id) === String(session.providerId));
@@ -305,8 +297,8 @@ export async function fetchRFQsFromOdoo(session: SessionPayload) {
           name: offer.offer_name,
           beneficiaryName,
           beneficiaryNationalId,
-          status: "RFQ",
-          serviceCost: 0,
+          status: offer.offer_state || "draft",
+          serviceCost: offer.service_cost || 0,
           charityContributionPercentage: 100,
           charityContributionValue: 0,
           beneficiaryContributionValue: 0,
@@ -337,3 +329,221 @@ export async function fetchRFQsFromOdoo(session: SessionPayload) {
 
   return apiRequests;
 }
+
+/**
+ * Fetches all financial claim requests from Odoo for the given session.
+ */
+export async function fetchClaimsFromOdoo(session: SessionPayload) {
+  const charities = await getCharitiesToSync(session);
+  const apiClaims: any[] = [];
+
+  for (const charity of charities) {
+    if (!charity.token) continue;
+    
+    // build the URL for claims
+    const base = buildBaseUrl(charity.domain || DEFAULT_DOMAIN);
+    const url = `${base}api/cerp/raising/claim`;
+
+    try {
+      const res = await fetch(url, {
+        headers: { 
+          code: charity.apiCode || "", 
+          token: charity.token 
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!res.ok) {
+        console.error(`Odoo Claims API Error: ${url}: ${res.statusText}`);
+        continue;
+      }
+
+      const body = await res.json();
+      const claims = body?.data?.raising_claim || [];
+      for (const claim of claims) {
+        apiClaims.push({
+          id: `${claim.purchase_order_id}-${claim.request_number}`,
+          purchaseOrderId: claim.purchase_order_id,
+          requestNumber: claim.request_number,
+          providerName: claim.provider_name || "مزود خدمة خارجي",
+          serviceCost: claim.service_cost || 0,
+          subServiceType: claim.sub_service_type || "",
+          claimStatus: claim.claim_status,
+          requestDate: claim.request_date
+            ? new Date(claim.request_date).toISOString()
+            : new Date().toISOString(),
+          charity: { name: charity.name },
+        });
+      }
+    } catch (err) {
+      console.error(`Odoo Claims connection error for charity ${charity.id}:`, err);
+    }
+  }
+
+  // Sort by date descending
+  apiClaims.sort(
+    (a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime()
+  );
+
+  return apiClaims;
+}
+
+/**
+ * Fetches detail of a specific raising claim request by purchaseOrderId from Odoo.
+ */
+export async function fetchClaimDetailFromOdoo(session: SessionPayload, purchaseOrderId: number | string) {
+  const charities = await getCharitiesToSync(session);
+
+  for (const charity of charities) {
+    if (!charity.token) continue;
+    
+    const base = buildBaseUrl(charity.domain || DEFAULT_DOMAIN);
+    const url = `${base}api/cerp/raising/claim/${purchaseOrderId}`;
+
+    try {
+      const res = await fetch(url, {
+        headers: { 
+          code: charity.apiCode || "", 
+          token: charity.token 
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!res.ok) {
+        continue;
+      }
+
+      const body = await res.json();
+      if (body?.success && body?.data?.raising_claim) {
+        const claim = body.data.raising_claim;
+        return {
+          purchaseOrderId: claim.purchase_order_id,
+          requestNumber: claim.request_number,
+          beneficiaryName: claim.beneficiary_name || "مستفيد خارجي",
+          beneficiaryMobile: claim.beneficiary_mobile || "",
+          beneficiaryEmail: claim.beneficiary_email || "",
+          claimStatus: claim.claim_status,
+          updateClaimReason: claim.update_claim_reason || "",
+          subServiceType: claim.sub_service_type || "",
+          requestDate: claim.request_date
+            ? new Date(claim.request_date).toISOString()
+            : new Date().toISOString(),
+          charity: { name: charity.name },
+          lines: claim.lines || [],
+          invoices: claim.invoices || [],
+          accountMoveDate: claim.invoices[0].account_move_date
+            ? new Date(claim.invoices[0].account_move_date).toISOString()
+            : new Date().toISOString(),
+        };
+      }
+    } catch (err) {
+      console.error(`Odoo Claim Detail connection error for charity ${charity.id}:`, err);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * POST to Odoo raising claim API.
+ */
+export async function postClaimToOdoo(
+  purchaseOrderId: number,
+  charity: SyncCharity,
+  params: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string }> {
+  const base = buildBaseUrl(charity.domain || DEFAULT_DOMAIN);
+  const url = `${base}api/cerp/raising/claim/${purchaseOrderId}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        code: charity.apiCode || "",
+        token: charity.token,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "call",
+        params,
+      }),
+      signal: AbortSignal.timeout(15000), // File uploads might take longer
+    });
+
+    const body = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg = body?.message || body?.error?.message || res.statusText;
+      return { ok: false, error: msg || "فشل الاتصال بالنظام الخارجي" };
+    }
+
+    if (body?.error) {
+      const msg = body.error?.data?.message || body.error?.message || "خطأ في النظام الخارجي";
+      return { ok: false, error: msg };
+    }
+
+    const result = body?.result;
+    if (result && result.success === false) {
+      return { ok: false, error: result.message || "خطأ في النظام الخارجي" };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error("Odoo Claim submission error:", err);
+    return { ok: false, error: "حدث خطأ في الاتصال بالنظام الخارجي" };
+  }
+}
+
+/**
+ * POST to Odoo update claim API.
+ */
+export async function updateClaimInOdoo(
+  purchaseOrderId: number,
+  charity: SyncCharity,
+  params: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string }> {
+  const base = buildBaseUrl(charity.domain || DEFAULT_DOMAIN);
+  const url = `${base}api/cerp/update/claim/${purchaseOrderId}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        code: charity.apiCode || "",
+        token: charity.token,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "call",
+        params,
+      }),
+      signal: AbortSignal.timeout(15000), // File uploads might take longer
+    });
+
+    const body = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg = body?.message || body?.error?.message || res.statusText;
+      return { ok: false, error: msg || "فشل الاتصال بالنظام الخارجي" };
+    }
+
+    if (body?.error) {
+      const msg = body.error?.data?.message || body.error?.message || "خطأ في النظام الخارجي";
+      return { ok: false, error: msg };
+    }
+
+    const result = body?.result;
+    if (result && result.success === false) {
+      return { ok: false, error: result.message || "خطأ في النظام الخارجي" };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error("Odoo Claim update error:", err);
+    return { ok: false, error: "حدث خطأ في الاتصال بالنظام الخارجي" };
+  }
+}
+
+

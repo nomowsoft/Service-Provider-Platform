@@ -4,7 +4,6 @@ import bcrypt from "bcrypt";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Seeding started...");
 
   // Clean up database
   await prisma.user.deleteMany({});
@@ -23,7 +22,6 @@ async function main() {
     },
   });
 
-  console.log("Seeding completed successfully!");
 }
 
 main()
