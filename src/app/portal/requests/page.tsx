@@ -215,9 +215,6 @@ export default function RequestsPage() {
                 <option value="to approve" className="bg-white dark:bg-[#03251c]">في انتظار الموافقة</option>
                 <option value="purchase" className="bg-white dark:bg-[#03251c]">أمر شراء</option>
                 <option value="cancel" className="bg-white dark:bg-[#03251c]">ملغي</option>
-                {/* <option value="sent" className="bg-white dark:bg-[#03251c]">طلب تسعير مرسل</option> */}
-                {/* <option value="approved" className="bg-white dark:bg-[#03251c]">معتمد</option>
-                <option value="done" className="bg-white dark:bg-[#03251c]">مكتمل / منتهي</option> */}
               </select>
             </div>
           </div>
