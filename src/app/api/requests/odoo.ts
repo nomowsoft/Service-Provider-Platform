@@ -431,7 +431,7 @@ export async function fetchClaimDetailFromOdoo(session: SessionPayload, purchase
           charity: { name: charity.name },
           lines: claim.lines || [],
           invoices: claim.invoices || [],
-          accountMoveDate: claim.invoices[0].account_move_date
+          accountMoveDate: claim.invoices?.[0]?.account_move_date
             ? new Date(claim.invoices[0].account_move_date).toISOString()
             : new Date().toISOString(),
         };

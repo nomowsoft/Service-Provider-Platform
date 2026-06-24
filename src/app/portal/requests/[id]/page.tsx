@@ -456,37 +456,6 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      {/* Odoo Visual Step Tracker */}
-      {/* <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-4">
-          <span className="text-xs font-extrabold text-emerald-950 dark:text-white">حالة الطلب الحالية:</span>
-          
-          <div className="flex-1 flex flex-row items-center justify-start md:justify-end gap-1 sm:gap-2">
-            {stages.map((stage, idx) => {
-              const isActive = localStatus === stage.key;
-              const isPast = idx < currentStageIndex;
-              return (
-                <div key={stage.key} className="flex items-center">
-                  <div
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all border ${isActive
-                        ? "bg-[#064e3b] text-white border-emerald-950 ring-4 ring-emerald-500/20"
-                        : isPast
-                          ? "bg-emerald-550/20 text-emerald-700 dark:text-emerald-400 border-emerald-200"
-                          : "bg-slate-100 dark:bg-[#03251c] text-slate-400 dark:text-slate-600 border-slate-200 dark:border-emerald-950"
-                      }`}
-                  >
-                    {stage.label}
-                  </div>
-                  {idx < stages.length - 1 && (
-                    <div className={`h-0.5 w-4 sm:w-8 transition ${isPast ? "bg-emerald-500" : "bg-slate-200 dark:bg-emerald-950"}`} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div> */}
-
       {/* Main content columns */}
       <div className="space-y-6">
 

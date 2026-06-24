@@ -228,7 +228,7 @@ export default function PortalDashboard() {
             className="glass-card hover-card rounded-3xl p-6 shadow-sm border border-emerald-100/50 flex items-center justify-between transition-all duration-200 hover:scale-[1.02] cursor-pointer"
           >
             <div className="space-y-2">
-              <span className="text-xs font-bold text-green-600/90 dark:text-green-400">الطلبات المكتملة</span>
+              <span className="text-xs font-bold text-green-600/90 dark:text-green-400">الطلبات المعتمدة</span>
               <h3 className="text-3xl font-extrabold text-emerald-955 dark:text-white">{s.completedCount}</h3>
               <p className="text-[10px] text-green-500 font-medium">الطلبات المعتمدة كأوامر شراء</p>
             </div>
