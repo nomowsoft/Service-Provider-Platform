@@ -162,15 +162,39 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
     e.preventDefault();
     setOfferSubmitting(true);
 
-    const validLines = offerLines.filter(l => l.productId !== "" && parseFloat(l.price) > 0);
-    if (validLines.length === 0) {
-      toast.error("يرجى إدخال منتج واحد وسعر صحيح على الأقل");
+    if (offerLines.length === 0) {
+      toast.error("يرجى إضافة بند واحد على الأقل");
       setOfferSubmitting(false);
       return;
     }
 
+    for (const line of offerLines) {
+      if (!line.productId) {
+        toast.error("يرجى اختيار المنتج لجميع البنود المضافة");
+        setOfferSubmitting(false);
+        return;
+      }
+      const priceVal = parseFloat(line.price);
+      if (isNaN(priceVal) || priceVal <= 0) {
+        const matchedProd = request?.agreedProducts?.find((p: any) => p.product_id === Number(line.productId));
+        const lineForProduct = request?.offerLines?.find((ol: any) => ol.product_id === Number(line.productId));
+        const displayName = lineForProduct?.name || matchedProd?.provider_product_name || `البند المختار`;
+        toast.error(`يرجى إدخال سعر صحيح أكبر من الصفر للبند "${displayName}"`);
+        setOfferSubmitting(false);
+        return;
+      }
+      const matchedProduct = request?.agreedProducts?.find((p: any) => p.product_id === Number(line.productId));
+      if (matchedProduct && priceVal > matchedProduct.cost_price) {
+        const lineForProduct = request?.offerLines?.find((ol: any) => ol.product_id === matchedProduct.product_id);
+        const displayName = lineForProduct?.name || matchedProduct.provider_product_name || `منتج ${matchedProduct.product_id}`;
+        toast.error(`سعر البند "${displayName}" لا يمكن أن يتجاوز السعر المعتمد (${matchedProduct.cost_price})`);
+        setOfferSubmitting(false);
+        return;
+      }
+    }
+
     try {
-      const formattedLines = validLines.map(l => ({
+      const formattedLines = offerLines.map(l => ({
         productId: Number(l.productId),
         price: parseFloat(l.price)
       }));
@@ -347,7 +371,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
         return { label: "مسودة عرض تسعير", bg: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-350 dark:border-slate-800" };
       case "sent":
         return { label: "طلب تسعير مرسل", bg: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-450 dark:border-blue-900/50" };
-      case "to_approve":
+      case "to approve":
         return { label: "في انتظار الموافقة", bg: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-450 dark:border-amber-900/50" };
       case "purchase":
         return { label: "أمر شراء", bg: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-450 dark:border-emerald-900/50" };
@@ -433,7 +457,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* Odoo Visual Step Tracker */}
-      <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50">
+      {/* <div className="glass-card rounded-3xl p-6 shadow-sm border border-emerald-100/50">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-4">
           <span className="text-xs font-extrabold text-emerald-950 dark:text-white">حالة الطلب الحالية:</span>
           
@@ -461,7 +485,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             })}
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Main content columns */}
       <div className="space-y-6">
@@ -541,7 +565,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
 
             {/* A: Form for Service Provider in RFQ stage */}
             {role === "SERVICE_PROVIDER" && localStatus === "RFQ" && (
-              <form onSubmit={handleSubmitOffer} className="space-y-4">
+              <form onSubmit={handleSubmitOffer} noValidate className="space-y-4">
                 <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-4 border border-emerald-100/30 flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300">
                   <AlertCircle size={16} />
                   <span>يمكنك تقديم سعر عرض لهذه الخدمة الطبية كشريك مسجل. يرجى إدخال التكلفة الإجمالية بدقة.</span>
@@ -657,19 +681,14 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
 
                           <div className="input-group md:col-span-3">
                             <label className="text-[10px] flex items-center gap-0.5">
-                              السعر (
-                              <SaudiRiyalIcon size={10} />
-                              )
+                              السعر (بحد أقصى: {matchedProduct?.cost_price || 0}
+                              <SaudiRiyalIcon size={8} />)
                             </label>
                             <input
                               type="number"
                               step="0.01"
                               min="0"
-                              max={
-                                line.productId && request.agreedProducts
-                                  ? request.agreedProducts.find((p: any) => p.product_id === line.productId)?.cost_price
-                                  : undefined
-                              }
+                              max={matchedProduct?.cost_price}
                               required
                               value={line.price}
                               onChange={(e) => {

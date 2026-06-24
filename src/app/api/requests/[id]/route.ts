@@ -52,7 +52,7 @@ export async function GET(
       beneficiaryName: fetchedOffer.beneficiary_name || "مستفيد خارجي",
       beneficiaryNationalId: fetchedOffer.beneficiary_mobile || "",
       status: localStatus,
-      serviceCost: 0,
+      serviceCost: fetchedOffer.service_cost || 0,
       charityContributionPercentage: 100,
       charityContributionValue: 0,
       beneficiaryContributionValue: 0,

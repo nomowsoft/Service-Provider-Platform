@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { 
   FileText, 
@@ -28,6 +29,9 @@ interface ClaimItem {
 }
 
 export default function ClaimsPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [claims, setClaims] = useState<ClaimItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -36,6 +40,27 @@ export default function ClaimsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+
+  // Sync selectedStatus with URL status param
+  useEffect(() => {
+    const statusParam = searchParams?.get("status");
+    if (statusParam) {
+      setSelectedStatus(statusParam);
+    } else {
+      setSelectedStatus("all");
+    }
+  }, [searchParams]);
+
+  const handleStatusChange = (status: string) => {
+    setSelectedStatus(status);
+    const params = new URLSearchParams(window.location.search);
+    if (status === "all") {
+      params.delete("status");
+    } else {
+      params.set("status", status);
+    }
+    router.replace(`/portal/claims?${params.toString()}`);
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -134,7 +159,7 @@ export default function ClaimsPage() {
             <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">الحالة</label>
             <select
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
+              onChange={(e) => handleStatusChange(e.target.value)}
               className="w-full h-10 rounded-xl border border-emerald-100 dark:border-emerald-950 bg-emerald-50/30 dark:bg-[#021b14] px-4 text-xs text-emerald-950 dark:text-white outline-none focus:border-emerald-500 cursor-pointer transition-all"
             >
               <option value="all" className="bg-white dark:bg-[#03251c]">جميع الحالات ({claims.length})</option>

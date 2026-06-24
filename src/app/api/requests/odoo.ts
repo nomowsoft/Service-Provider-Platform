@@ -298,7 +298,7 @@ export async function fetchRFQsFromOdoo(session: SessionPayload) {
           beneficiaryName,
           beneficiaryNationalId,
           status: offer.offer_state || "draft",
-          serviceCost: 0,
+          serviceCost: offer.service_cost || 0,
           charityContributionPercentage: 100,
           charityContributionValue: 0,
           beneficiaryContributionValue: 0,
