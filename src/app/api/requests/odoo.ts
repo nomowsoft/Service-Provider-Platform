@@ -311,6 +311,7 @@ export async function fetchRFQsFromOdoo(session: SessionPayload) {
             name: offer.offer_partner_name || "مزود خدمة خارجي",
           },
           priceOffers: [],
+          requestNumber: offer.request_number || "",
         };
       });
 

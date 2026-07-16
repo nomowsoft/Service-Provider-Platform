@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const integrationRequestSchema = z.object({
+  type: z.string().optional().default("connection"),
   apiCode: z.string({ message: "كود الربط لمزود الخدمة (apiCode) مطلوب" })
     .trim()
     .min(1, "كود الربط لمزود الخدمة (apiCode) مطلوب"),
@@ -32,6 +33,7 @@ export const priceOfferSchema = z.object({
     z.object({
       productId: z.coerce.number({ message: "يرجى تحديد المنتج" }),
       price: z.coerce.number().positive({ message: "قيمة عرض السعر يجب أن تكون أكبر من 0" }),
+      qty: z.coerce.number().positive({ message: "الكمية يجب أن تكون أكبر من 0" }).default(1),
     })
   ).min(1, "يجب إضافة منتج واحد على الأقل"),
   provider_note: z.string().optional(),
@@ -49,6 +51,7 @@ export const raisingClaimSchema = z.object({
     z.object({
       product_id: z.coerce.number({ message: "يرجى تحديد المنتج للبند" }),
       price_unit: z.coerce.number().positive({ message: "قيمة سعر البند يجب أن تكون أكبر من 0" }),
+      quantity: z.coerce.number().int().positive({ message: "الكمية يجب أن تكون عدداً صحيحاً أكبر من 0" }).default(1),
     })
   ).min(1, "يجب إضافة بند واحد على الأقل في الفاتورة"),
   attachments: z.array(
@@ -73,6 +76,7 @@ export const updateClaimSchema = z.object({
         z.object({
           product_id: z.coerce.number({ message: "يرجى تحديد المنتج للبند" }),
           price_unit: z.coerce.number().positive({ message: "قيمة سعر البند يجب أن تكون أكبر من 0" }),
+          quantity: z.coerce.number().int().positive({ message: "الكمية يجب أن تكون عدداً صحيحاً أكبر من 0" }).default(1),
         })
       ).min(1, "يجب إضافة بند واحد على الأقل في الفاتورة"),
       attachments: z.array(

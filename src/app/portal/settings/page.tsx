@@ -65,6 +65,8 @@ export default function SettingsPage() {
   const [charitySortDirection, setCharitySortDirection] = useState<"asc" | "desc">("asc");
   const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
   const [approvingId, setApprovingId] = useState<number | null>(null);
+  const [updatingItem, setUpdatingItem] = useState<any | null>(null);
+  const [updateActionId, setUpdateActionId] = useState<number | null>(null);
 
   // API Config (Mock keys for beautiful visual UX)
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -288,6 +290,44 @@ export default function SettingsPage() {
       toast.error(err.message || "حدث خطأ أثناء تأكيد الارتباط");
     } finally {
       setApprovingId(null);
+    }
+  };
+
+  const handleApproveUpdate = async (id: number) => {
+    setUpdateActionId(id);
+    try {
+      const res = await fetch(`/api/providers/charity-tokens/${id}/approve`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "فشل اعتماد طلب تحديث البيانات");
+      toast.success("تم اعتماد طلب تحديث البيانات بنجاح!");
+      setUpdatingItem(null);
+      fetchCharities();
+    } catch (error) {
+      const err = error as Error;
+      toast.error(err.message || "حدث خطأ أثناء اعتماد طلب التحديث");
+    } finally {
+      setUpdateActionId(null);
+    }
+  };
+
+  const handleRejectUpdate = async (id: number) => {
+    setUpdateActionId(id);
+    try {
+      const res = await fetch(`/api/providers/charity-tokens/${id}/reject`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "فشل رفض طلب تحديث البيانات");
+      toast.success("تم رفض طلب تحديث البيانات");
+      setUpdatingItem(null);
+      fetchCharities();
+    } catch (error) {
+      const err = error as Error;
+      toast.error(err.message || "حدث خطأ أثناء رفض طلب التحديث");
+    } finally {
+      setUpdateActionId(null);
     }
   };
 
@@ -734,6 +774,11 @@ export default function SettingsPage() {
                                     نشط
                                   </span>
                                 )}
+                                {item.status === "UPDATING" && (
+                                  <span className="bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300 px-2.5 py-1 rounded-full text-[10px] font-bold animate-pulse">
+                                    طلب تحديث
+                                  </span>
+                                )}
                               </td>
                               <td className="p-4 text-slate-400 text-[10px]">
                                 {item.connectedAt ? (
@@ -751,9 +796,18 @@ export default function SettingsPage() {
                                   <button
                                     type="button"
                                     onClick={() => setSelectedRequest(item)}
-                                    className="bg-emerald-950 hover:bg-emerald-900 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition flex items-center gap-1"
+                                    className="bg-emerald-950 hover:bg-emerald-900 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
                                   >
                                     عرض طلب الارتباط
+                                  </button>
+                                )}
+                                {item.status === "UPDATING" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setUpdatingItem(item)}
+                                    className="bg-yellow-600 hover:bg-yellow-700 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                  >
+                                    عرض طلب التحديث
                                   </button>
                                 )}
                               </td>
@@ -847,6 +901,119 @@ export default function SettingsPage() {
                 className="bg-emerald-950 hover:bg-emerald-900 text-white rounded-xl px-5 py-2 text-xs font-bold transition flex items-center gap-1.5"
               >
                 {approvingId === selectedRequest.id ? "جاري الموافقة..." : "موافقة وتأكيد الربط"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {updatingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" dir="rtl">
+          <div className="bg-white dark:bg-[#021f18] border border-slate-100 dark:border-emerald-900/60 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-emerald-950/60 flex items-center justify-between">
+              <h3 className="text-base font-extrabold text-emerald-950 dark:text-white">طلب تحديث بيانات الجمعية</h3>
+              <button 
+                onClick={() => setUpdatingItem(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
+              <div>
+                <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/20 p-3 text-xs text-yellow-800 dark:text-yellow-300 font-medium">
+                  وصل طلب تحديث بيانات من الجمعية. يرجى مراجعة التغييرات أدناه ثم اعتماد التحديث أو رفضه.
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">البيان</label>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">البيانات الحالية</label>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-amber-600 block mb-1">البيانات الجديدة</label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  اسم الجمعية
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs text-slate-500 dark:text-slate-400">
+                  {updatingItem.name}
+                </div>
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-800/40 text-xs font-bold text-amber-800 dark:text-amber-300">
+                  {updatingItem.pendingName || updatingItem.name}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  البريد الإلكتروني
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs text-slate-500 dark:text-slate-400">
+                  {updatingItem.email || "لا يوجد"}
+                </div>
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-800/40 text-xs font-bold text-amber-800 dark:text-amber-300">
+                  {updatingItem.pendingEmail || "لا يوجد"}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  رقم الهاتف
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs text-slate-500 dark:text-slate-400">
+                  {updatingItem.phone || "لا يوجد"}
+                </div>
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-800/40 text-xs font-bold text-amber-800 dark:text-amber-300">
+                  {updatingItem.pendingPhone || "لا يوجد"}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  الدومين (domain)
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-emerald-950/20 rounded-xl border border-slate-100 dark:border-emerald-950/40 text-xs text-slate-500 dark:text-slate-400">
+                  {updatingItem.domain || "لا يوجد"}
+                </div>
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-800/40 text-xs font-bold text-amber-800 dark:text-amber-300">
+                  {updatingItem.pendingDomain || "لا يوجد"}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 bg-slate-50 dark:bg-[#03251c]/20 border-t border-slate-100 dark:border-emerald-950/60 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setUpdatingItem(null)}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-100 dark:border-emerald-950/60 dark:hover:bg-emerald-950/20 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                disabled={updateActionId === updatingItem.id}
+                onClick={() => handleRejectUpdate(updatingItem.id)}
+                className="px-4 py-2 border border-rose-300 hover:bg-rose-50 dark:border-rose-900/40 dark:hover:bg-rose-950/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              >
+                {updateActionId === updatingItem.id ? "جاري الرفض..." : "رفض التحديث"}
+              </button>
+              <button
+                type="button"
+                disabled={updateActionId === updatingItem.id}
+                onClick={() => handleApproveUpdate(updatingItem.id)}
+                className="bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl px-5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              >
+                {updateActionId === updatingItem.id ? "جاري الاعتماد..." : "اعتماد التحديث"}
               </button>
             </div>
           </div>

@@ -71,6 +71,7 @@ export async function GET(
       offerLines: fetchedOffer.lines || [],
       offerNotes: fetchedOffer.offer_notes || "",
       providerNote: fetchedOffer.provider_note || "",
+      requestReportAttachment: fetchedOffer.request_report_attachment || null,
     };
 
     return NextResponse.json({ request: serviceRequest });
@@ -150,7 +151,7 @@ export async function POST(
     const { lines, provider_note } = validation.data;
 
     // Build Odoo order lines & validate prices
-    const odooOrderLines: { product_id: number; price_unit: number }[] = [];
+    const odooOrderLines: { product_id: number; price_unit: number; product_qty: number }[] = [];
     let amountTotal = 0;
 
     if (agreedProducts.length > 0) {
@@ -172,13 +173,13 @@ export async function POST(
             { status: 400 }
           );
         }
-        odooOrderLines.push({ product_id: line.productId, price_unit: line.price });
-        amountTotal += line.price;
+        odooOrderLines.push({ product_id: line.productId, price_unit: line.price, product_qty: line.qty });
+        amountTotal += line.price * line.qty;
       }
     } else {
       for (const line of lines) {
-        odooOrderLines.push({ product_id: line.productId, price_unit: line.price });
-        amountTotal += line.price;
+        odooOrderLines.push({ product_id: line.productId, price_unit: line.price, product_qty: line.qty });
+        amountTotal += line.price * line.qty;
       }
     }
 

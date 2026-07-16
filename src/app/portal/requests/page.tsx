@@ -10,7 +10,8 @@ import {
   Building,
   Activity,
   ChevronRight,
-  X
+  X, 
+  Hash 
 } from "lucide-react";
 import toast from "react-hot-toast";
 import DatePicker from "@/components/ui/DatePicker";
@@ -31,6 +32,7 @@ interface RequestItem {
   createdAt: string;
   charity: { name: string };
   serviceProvider?: { name: string } | null;
+  requestNumber: string;
 }
 
 export default function RequestsPage() {
@@ -286,9 +288,12 @@ export default function RequestsPage() {
                 {/* Card Header */}
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
-                    <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400 uppercase">
-                      {req.name}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Hash className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400 uppercase">
+                        {req.requestNumber}
+                      </span>
+                    </div>
                     <h3 className="text-base font-extrabold text-emerald-950 dark:text-white">
                       {req.beneficiaryName}
                     </h3>

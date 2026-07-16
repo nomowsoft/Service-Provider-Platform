@@ -22,7 +22,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: firstErrorMessage }, { status: 400 });
     }
 
-    const { apiCode, token, name, email, phone, domain } = validation.data;
+    const { type, apiCode, token, name, email, phone, domain } = validation.data;
 
     // 2. Fetch Provider and Charity in parallel with selective fields (optimization)
     const [provider, charity] = await Promise.all([
@@ -51,6 +51,35 @@ export async function POST(request: Request) {
       );
     }
 
+    if (type === "update") {
+      if (charity.status !== "CONNECTED") {
+        return NextResponse.json(
+          { message: "يجب أن تكون الجمعية متصلة أولاً لتقديم طلب تحديث" },
+          { status: 400 }
+        );
+      }
+
+      await prisma.charity.update({
+        where: { id: charity.id },
+        data: {
+          status: "UPDATING",
+          pendingName: name,
+          pendingEmail: email,
+          pendingPhone: phone,
+          pendingDomain: domain,
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: "تم استقبال طلب تحديث البيانات بنجاح، وبانتظار مراجعة مزود الخدمة",
+        },
+        { status: 200 }
+      );
+    }
+
+    // Connection type
     if (charity.status === "REQUESTED") {
       return NextResponse.json(
         { message: "يوجد طلب ارتباط مسبق لهذه الجمعية وهو قيد المعالجة حالياً" },
