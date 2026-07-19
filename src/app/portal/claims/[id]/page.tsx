@@ -22,12 +22,14 @@ import {
   Plus, 
   Hash,
   Paperclip,
-  Eye
+  Eye,
+  IdCard
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
 import { raisingClaimSchema, updateClaimSchema } from "@/utils/validation";
 import DatePicker from "@/components/ui/DatePicker";
+import AttachmentPreview from "@/components/ui/AttachmentPreview";
 
 interface ClaimLine {
   line_id: number;
@@ -57,6 +59,7 @@ interface Attachment {
   attachment_id: number;
   name: string;
   url: string;
+  mimetype: string;
 }
 
 interface Invoice {
@@ -72,6 +75,7 @@ interface ClaimDetail {
   requestNumber: string;
   beneficiaryName: string;
   beneficiaryMobile: string;
+  beneficiaryID: string;
   beneficiaryEmail: string;
   claimStatus: string;
   updateClaimReason: string;
@@ -93,20 +97,20 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [invoiceRef, setInvoiceRef] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
-  const [attachments, setAttachments] = useState<{ attachment_id?: number; name: string; datas?: string; url?: string }[]>([]);
+  const [attachments, setAttachments] = useState<{ attachment_id?: number; name: string; datas?: string; url?: string; mimetype?: string }[]>([]);
   const [invoiceLines, setInvoiceLines] = useState<{ productId: number; priceUnit: string; name: string; qty: number }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [submittingInvoice, setSubmittingInvoice] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [isAddingLine, setIsAddingLine] = useState(false);
-  const [selectedPreviewAtt, setSelectedPreviewAtt] = useState<{ url: string; name: string } | null>(null);
+  const [selectedPreviewAtt, setSelectedPreviewAtt] = useState<{ url: string; name: string; mimetype: string } | null>(null);
   const isEditing = !!(claim && claim.invoices && claim.invoices.length > 0);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     setUploading(true);
     const files = Array.from(e.target.files);
-    const newAttachments: { attachment_id?: number; name: string; datas: string; url?: string }[] = [];
+    const newAttachments: { attachment_id?: number; name: string; datas: string; url?: string; mimetype?: string }[] = [];
 
     for (const file of files) {
       try {
@@ -308,12 +312,6 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
       }
       const data = await res.json();
       setClaim(data.claim);
-      if (data.claim && data.claim.invoices?.[0]?.attachments?.[0]) {
-        setSelectedPreviewAtt({
-          url: data.claim.invoices[0].attachments[0].url,
-          name: data.claim.invoices[0].attachments[0].name,
-        });
-      }
       if (data.claim && data.claim.lines) {
         setInvoiceLines(data.claim.lines.map((l: any) => ({
           productId: l.product_id,
@@ -456,7 +454,17 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                     <Phone size={12} className="text-emerald-600" />
                     <span>رقم الجوال</span>
                   </span>
-                  <p className="text-sm font-extrabold text-emerald-950 dark:text-white mt-0.5" dir="ltr">{claim.beneficiaryMobile}</p>
+                  <p className="text-sm font-extrabold text-emerald-950 dark:text-white mt-0.5">{claim.beneficiaryMobile}</p>
+                </div>
+              )}
+
+              {claim.beneficiaryID && (
+                <div className="space-y-1 bg-emerald-50/20 dark:bg-[#021b14] p-3 rounded-2xl border border-emerald-50/50 dark:border-emerald-950/20">
+                  <span className="text-slate-400 font-bold flex items-center gap-1">
+                    <IdCard size={12} className="text-emerald-600" />
+                    <span>رقم الهوية</span>
+                  </span>
+                  <p className="text-sm font-extrabold text-emerald-950 dark:text-white mt-0.5">{claim.beneficiaryID}</p>
                 </div>
               )}
 
@@ -500,7 +508,7 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                 </p>
               </div>
               <div className="space-y-0.5">
-                <span className="text-slate-400 font-bold">رقم أمر الشراء</span>
+                <span className="text-slate-400 font-bold">رقم الطلب</span>
                 <p className="text-sm font-extrabold text-emerald-950 dark:text-white flex items-center">
                   <Hash className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                   {claim.requestNumber}
@@ -803,7 +811,10 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                           key={idx}
                           className="group flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/20 dark:bg-emerald-950/10 border border-emerald-100/50 dark:border-emerald-900/30 hover:border-emerald-200 dark:hover:border-emerald-800 transition-all duration-200 shadow-sm hover:shadow-md"
                         >
-                          <div className="flex items-center gap-2 overflow-hidden">
+                          <div
+                            className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1"
+                            onClick={() => att.url && setSelectedPreviewAtt({ url: att.url, name: att.name, mimetype: att.mimetype || "" })}
+                          >
                             <Paperclip size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0 group-hover:rotate-12 transition-transform" />
                             <span className="truncate text-[11px] font-semibold text-emerald-950 dark:text-emerald-200" title={att.name}>
                               {att.name}
@@ -939,7 +950,7 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                               <button
                                 key={att.attachment_id}
                                 type="button"
-                                onClick={() => setSelectedPreviewAtt({ url: att.url, name: att.name })}
+                                onClick={() => setSelectedPreviewAtt({ url: att.url, name: att.name, mimetype: att.mimetype })}
                                 className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all duration-200 group w-full text-right ${
                                   isSelected
                                     ? "bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 text-emerald-900 dark:text-emerald-100 font-bold shadow-sm"
@@ -977,24 +988,11 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                   </div>
                 ))}
 
-                {selectedPreviewAtt && (
-                  <div className="space-y-2 pt-4 border-t border-emerald-50 dark:border-emerald-950/25 animate-fadeIn">
-                    <span className="text-xs font-bold text-emerald-800 dark:text-emerald-400 flex items-center gap-1">
-                      <FileCheck2 size={14} className="text-emerald-600" />
-                      معاينة المستند المالي: <span className="font-semibold text-slate-700 dark:text-slate-200">{selectedPreviewAtt.name}</span>
-                    </span>
-                    <div className="w-full rounded-2xl overflow-hidden border-2 border-slate-100 dark:border-gray-800 bg-slate-50 dark:bg-gray-900 h-[600px] shadow-inner relative group">
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <Loader2 size={32} className="animate-spin text-emerald-600 dark:text-emerald-400" />
-                      </div>
-                      <iframe
-                        src={`${selectedPreviewAtt.url}#view=FitH`}
-                        className="w-full h-full border-0 absolute inset-0 z-10 bg-transparent"
-                        title="معاينة المستند"
-                      ></iframe>
-                    </div>
-                  </div>
-                )}
+                <AttachmentPreview
+                  isOpen={Boolean(selectedPreviewAtt)}
+                  onClose={() => setSelectedPreviewAtt(null)}
+                  file={selectedPreviewAtt}
+                />
               </div>
             )}
           </div>

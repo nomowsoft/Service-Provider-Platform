@@ -9,7 +9,7 @@ import {
   Calendar,
   Building,
   Activity,
-  ChevronRight,
+  ChevronLeft,
   X, 
   Hash 
 } from "lucide-react";
@@ -346,7 +346,7 @@ export default function RequestsPage() {
                     className="inline-flex items-center justify-center gap-1 rounded-xl bg-[#064e3b] hover:bg-[#043e2f] px-4 py-2.5 text-xs font-bold text-white transition"
                   >
                     <span>عرض التفاصيل</span>
-                    <ChevronRight size={14} />
+                    <ChevronLeft size={14} />
                   </Link>
                 </div>
               </div>

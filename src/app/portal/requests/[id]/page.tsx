@@ -22,6 +22,7 @@ import {
 import toast from "react-hot-toast";
 import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
 import Select from "@/components/ui/Select";
+import AttachmentPreview from "@/components/ui/AttachmentPreview";
 
 interface PriceOffer {
   id: number;
@@ -61,7 +62,7 @@ interface RequestDetail {
   offerLines?: { id: number; name: string; price_subtotal: number; price_unit: number; product_id: number; product_qty: number }[];
   offerNotes?: string | null;
   providerNote?: string | null;
-  requestReportAttachment?: { attachment_id: number; name: string; url: string } | null;
+  requestReportAttachment?: { attachment_id: number; name: string; url: string; mimetype: string } | null;
 }
 
 interface SessionUser {
@@ -88,6 +89,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   const [request, setRequest] = useState<RequestDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<SessionUser | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<{ url: string; name: string; mimetype: string } | null>(null);
 
   // Form states: Price Offer
   const [providerNote, setProviderNote] = useState("");
@@ -556,16 +558,15 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
               <div className="border-t border-emerald-50 dark:border-emerald-950 pt-4">
                 <span className="text-xs font-bold text-slate-500 block mb-2">مرفق تقرير الطلب:</span>
                 <div className="flex flex-wrap gap-2">
-                  <a
-                    href={request.requestReportAttachment.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/30 text-emerald-950 dark:text-emerald-250 text-xs font-semibold hover:bg-emerald-500/10 dark:hover:bg-emerald-950/40 hover:border-emerald-300 dark:hover:border-emerald-800 transition-all shadow-sm hover:shadow"
+                  <button
+                    type="button"
+                    onClick={() => setPreviewAttachment({ url: request.requestReportAttachment!.url, name: request.requestReportAttachment!.name, mimetype: request.requestReportAttachment!.mimetype })}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/30 text-emerald-950 dark:text-emerald-250 text-xs font-semibold hover:bg-emerald-500/10 dark:hover:bg-emerald-950/40 hover:border-emerald-300 dark:hover:border-emerald-800 transition-all shadow-sm hover:shadow cursor-pointer group"
                   >
-                    <Paperclip size={13} className="text-emerald-600 dark:text-emerald-400" />
+                    <Paperclip size={13} className="text-emerald-600 dark:text-emerald-400 group-hover:rotate-12 transition-transform" />
                     <span className="truncate max-w-[250px]">{request.requestReportAttachment.name}</span>
-                    <Download size={13} className="text-emerald-600/70 dark:text-emerald-400/70 ml-1" />
-                  </a>
+                    <Eye size={13} className="text-emerald-600/70 dark:text-emerald-400/70 ml-1" />
+                  </button>
                 </div>
               </div>
             )}
@@ -928,6 +929,12 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
       </div>
+
+      <AttachmentPreview
+        isOpen={Boolean(previewAttachment)}
+        onClose={() => setPreviewAttachment(null)}
+        file={previewAttachment}
+      />
     </div>
   );
 }

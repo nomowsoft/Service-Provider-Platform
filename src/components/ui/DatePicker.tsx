@@ -273,7 +273,7 @@ export default function DatePicker({
           value={displayValue}
           placeholder={placeholder || (isAr ? "اختر التاريخ" : "Select date")}
           onClick={handleOpenToggle}
-          className={`w-full h-10 rounded-xl border border-emerald-100 dark:border-emerald-950 bg-emerald-50/30 dark:bg-[#021b14] !pl-10 !pr-10 text-xs text-emerald-950 dark:text-white outline-none focus:border-emerald-500 transition-all cursor-pointer select-none text-left ${
+          className={`w-full min-h-10 rounded-xl border border-emerald-100 dark:border-emerald-950 bg-emerald-50/30 dark:bg-[#021b14] !pl-10 !pr-10 text-xs text-emerald-950 dark:text-white outline-none focus:border-emerald-500 transition-all cursor-pointer select-none text-left ${
             error
               ? "border-red-400 ring-2 ring-red-400/20"
               : isOpen

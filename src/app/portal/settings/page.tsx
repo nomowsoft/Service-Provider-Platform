@@ -15,9 +15,13 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  AlertTriangle
+  AlertTriangle,
+  Eye,
+  EyeOff,
+  ShieldCheck
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { changePasswordSchema } from "@/utils/validation";
 
 interface UserType {
   id: string;
@@ -48,11 +52,15 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [user, setUser] = useState<UserType | null>(null);
 
-  // Profile fields
+  // Profile & Password fields
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Charity Integration state
   const [charities, setCharities] = useState<any[]>([]);
@@ -122,8 +130,14 @@ export default function SettingsPage() {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentPassword || !newPassword) {
-      toast.error("يرجى ملء جميع حقول كلمة المرور");
+
+    if (!currentPassword) {
+      toast.error("يرجى إدخال كلمة المرور الحالية");
+      return;
+    }
+
+    if (newPassword && confirmPassword && newPassword !== confirmPassword) {
+      toast.error("كلمة المرور الجديدة وتأكيدها غير متطابقتين");
       return;
     }
 
@@ -141,6 +155,7 @@ export default function SettingsPage() {
       toast.success("تم تغيير كلمة المرور بنجاح!");
       setCurrentPassword("");
       setNewPassword("");
+      setConfirmPassword("");
     } catch (error) {
       const err = error as Error;
       toast.error(err.message || "حدث خطأ أثناء تغيير كلمة المرور");
@@ -485,30 +500,116 @@ export default function SettingsPage() {
               <div className="space-y-6">
                 <div className="border-b border-emerald-50 dark:border-emerald-950 pb-3">
                   <h2 className="text-base font-extrabold text-emerald-950 dark:text-white">تغيير كلمة المرور</h2>
-                  <p className="text-[10px] text-slate-500 mt-1">يرجى اختيار كلمة مرور قوية وغير مكررة لحماية حسابك</p>
+                  <p className="text-[10px] text-slate-500 mt-1">يرجى اختيار كلمة مرور قوية تطابق معايير الأمان لحماية حسابك</p>
                 </div>
 
-                <form onSubmit={handleChangePassword} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <form onSubmit={handleChangePassword} className="space-y-5">
+                  <div className="space-y-4">
+                    {/* Current Password */}
                     <div className="input-group">
                       <label>كلمة المرور الحالية</label>
-                      <input
-                        type="password"
-                        placeholder="••••••••"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        required
-                      />
+                      <div className="relative">
+                        <input
+                          type={showCurrentPassword ? "text" : "password"}
+                          placeholder="••••••••"
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          className="w-full pl-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600/50 hover:text-emerald-500 transition-colors focus:outline-none cursor-pointer"
+                        >
+                          {showCurrentPassword ? (
+                            <Eye className="h-4 w-4" />
+                          ) : (
+                            <EyeOff className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
                     </div>
-                    <div className="input-group">
-                      <label>كلمة المرور الجديدة</label>
-                      <input
-                        type="password"
-                        placeholder="••••••••"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        required
-                      />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* New Password */}
+                      <div className="input-group">
+                        <label>كلمة المرور الجديدة</label>
+                        <div className="relative">
+                          <input
+                            type={showNewPassword ? "text" : "password"}
+                            placeholder="••••••••"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className="w-full pl-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600/50 hover:text-emerald-500 transition-colors focus:outline-none cursor-pointer"
+                          >
+                            {showNewPassword ? (
+                              <Eye className="h-4 w-4" />
+                            ) : (
+                              <EyeOff className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Confirm New Password */}
+                      <div className="input-group">
+                        <label>تأكيد كلمة المرور الجديدة</label>
+                        <div className="relative">
+                          <input
+                            type={showConfirmPassword ? "text" : "password"}
+                            placeholder="••••••••"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            className="w-full pl-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600/50 hover:text-emerald-500 transition-colors focus:outline-none cursor-pointer"
+                          >
+                            {showConfirmPassword ? (
+                              <Eye className="h-4 w-4" />
+                            ) : (
+                              <EyeOff className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Password Strength Guidelines */}
+                  <div className="bg-emerald-50/50 dark:bg-[#021b14] border border-emerald-100 dark:border-emerald-950 rounded-2xl p-4 space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                      <ShieldCheck size={16} className="text-emerald-600 dark:text-emerald-400" />
+                      <span>اشتراطات قوة كلمة المرور:</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                      <div className={`flex items-center gap-1.5 ${newPassword.length >= 8 ? "text-emerald-600 font-bold dark:text-emerald-400" : "text-slate-400"}`}>
+                        <span>{newPassword.length >= 8 ? "✓" : "○"}</span>
+                        <span>8 أحرف على الأقل</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${/[A-Z]/.test(newPassword) ? "text-emerald-600 font-bold dark:text-emerald-400" : "text-slate-400"}`}>
+                        <span>{/[A-Z]/.test(newPassword) ? "✓" : "○"}</span>
+                        <span>حرف كبير واحد (A-Z) على الأقل</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${/[a-z]/.test(newPassword) ? "text-emerald-600 font-bold dark:text-emerald-400" : "text-slate-400"}`}>
+                        <span>{/[a-z]/.test(newPassword) ? "✓" : "○"}</span>
+                        <span>حرف صغير واحد (a-z) على الأقل</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${/\d/.test(newPassword) ? "text-emerald-600 font-bold dark:text-emerald-400" : "text-slate-400"}`}>
+                        <span>{/\d/.test(newPassword) ? "✓" : "○"}</span>
+                        <span>رقم واحد (0-9) على الأقل</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 col-span-1 sm:col-span-2 ${/[^A-Za-z0-9]/.test(newPassword) ? "text-emerald-600 font-bold dark:text-emerald-400" : "text-slate-400"}`}>
+                        <span>{/[^A-Za-z0-9]/.test(newPassword) ? "✓" : "○"}</span>
+                        <span>رمز خاص واحد على الأقل (مثل @$!%*?&)</span>
+                      </div>
                     </div>
                   </div>
 
@@ -516,7 +617,7 @@ export default function SettingsPage() {
                     <button
                       type="submit"
                       disabled={saving}
-                      className="w-full sm:w-auto rounded-xl py-3 px-6 text-xs font-bold text-white gradient-btn"
+                      className="w-full sm:w-auto rounded-xl py-3 px-6 text-xs font-bold text-white gradient-btn cursor-pointer disabled:opacity-50"
                     >
                       {saving ? "جاري التحديث..." : "تحديث كلمة المرور"}
                     </button>
