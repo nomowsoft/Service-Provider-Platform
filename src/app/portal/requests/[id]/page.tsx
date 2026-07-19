@@ -14,10 +14,15 @@ import {
   FileCheck2,
   Wrench,
   ThumbsUp,
-  ThumbsDown
+  ThumbsDown,
+  Paperclip,
+  Download,
+  Eye
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
+import Select from "@/components/ui/Select";
+import AttachmentPreview from "@/components/ui/AttachmentPreview";
 
 interface PriceOffer {
   id: number;
@@ -57,6 +62,7 @@ interface RequestDetail {
   offerLines?: { id: number; name: string; price_subtotal: number; price_unit: number; product_id: number; product_qty: number }[];
   offerNotes?: string | null;
   providerNote?: string | null;
+  requestReportAttachment?: { attachment_id: number; name: string; url: string; mimetype: string } | null;
 }
 
 interface SessionUser {
@@ -83,11 +89,21 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   const [request, setRequest] = useState<RequestDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<SessionUser | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<{ url: string; name: string; mimetype: string } | null>(null);
 
   // Form states: Price Offer
   const [providerNote, setProviderNote] = useState("");
-  const [offerLines, setOfferLines] = useState<{ id: string; productId: number | ""; price: string; productName: string; productCode: string }[]>([
-    { id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "" }
+  const [offerLines, setOfferLines] = useState<{
+    id: string;
+    productId: number | "";
+    price: string;
+    productName: string;
+    productCode: string;
+    discount?: string;
+    tax?: string;
+    qty?: string;
+  }[]>([
+    { id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "", discount: "", tax: "", qty: "1" }
   ]);
   const [offerSubmitting, setOfferSubmitting] = useState(false);
 
@@ -135,12 +151,15 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             price: l.price_unit.toString(),
             productName: l.name || matchedProd?.provider_product_name || "",
             productCode: matchedProd?.provider_product_code || "",
+            discount: matchedProd?.discount_percentage?.toString() || "0",
+            tax: matchedProd?.tax?.toString() || "0",
+            qty: (l.product_qty || 1).toString(),
           };
         }));
         setProviderNote(data.request.providerNote || "");
       } else if (sessionData?.user?.role === "SERVICE_PROVIDER") {
         // No existing lines, start with empty form
-        setOfferLines([{ id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "" }]);
+        setOfferLines([{ id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "", discount: "", tax: "", qty: "1" }]);
       }
     } catch (error) {
       console.error(error);
@@ -183,6 +202,15 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
         setOfferSubmitting(false);
         return;
       }
+      const qtyVal = parseFloat(line.qty || "1");
+      if (isNaN(qtyVal) || qtyVal <= 0) {
+        const matchedProd = request?.agreedProducts?.find((p: any) => p.product_id === Number(line.productId));
+        const lineForProduct = request?.offerLines?.find((ol: any) => ol.product_id === Number(line.productId));
+        const displayName = lineForProduct?.name || matchedProd?.provider_product_name || `البند المختار`;
+        toast.error(`يرجى إدخال كمية صحيحة أكبر من الصفر للبند "${displayName}"`);
+        setOfferSubmitting(false);
+        return;
+      }
       const matchedProduct = request?.agreedProducts?.find((p: any) => p.product_id === Number(line.productId));
       if (matchedProduct && priceVal > matchedProduct.cost_price) {
         const lineForProduct = request?.offerLines?.find((ol: any) => ol.product_id === matchedProduct.product_id);
@@ -196,7 +224,8 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
     try {
       const formattedLines = offerLines.map(l => ({
         productId: Number(l.productId),
-        price: parseFloat(l.price)
+        price: parseFloat(l.price),
+        qty: parseFloat(l.qty || "1") || 1,
       }));
 
       const res = await fetch(`/api/requests/${id}`, {
@@ -524,6 +553,23 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                 </p>
               </div>
             </div>
+
+            {request.requestReportAttachment && (
+              <div className="border-t border-emerald-50 dark:border-emerald-950 pt-4">
+                <span className="text-xs font-bold text-slate-500 block mb-2">مرفق تقرير الطلب:</span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewAttachment({ url: request.requestReportAttachment!.url, name: request.requestReportAttachment!.name, mimetype: request.requestReportAttachment!.mimetype })}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/30 text-emerald-950 dark:text-emerald-250 text-xs font-semibold hover:bg-emerald-500/10 dark:hover:bg-emerald-950/40 hover:border-emerald-300 dark:hover:border-emerald-800 transition-all shadow-sm hover:shadow cursor-pointer group"
+                  >
+                    <Paperclip size={13} className="text-emerald-600 dark:text-emerald-400 group-hover:rotate-12 transition-transform" />
+                    <span className="truncate max-w-[250px]">{request.requestReportAttachment.name}</span>
+                    <Eye size={13} className="text-emerald-600/70 dark:text-emerald-400/70 ml-1" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Interactive Role-Based Forms Section */}
@@ -540,6 +586,16 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                   <span>يمكنك تقديم سعر عرض لهذه الخدمة الطبية كشريك مسجل. يرجى إدخال التكلفة الإجمالية بدقة.</span>
                 </div>
 
+                <div className="input-group mt-4">
+                  <label>ملاحظات إضافية (اختياري)</label>
+                  <input
+                    type="text"
+                    placeholder="فترة التشغيل، التفاصيل، إلخ..."
+                    value={providerNote}
+                    onChange={(e) => setProviderNote(e.target.value)}
+                  />
+                </div>
+
                 <div className="space-y-4 border border-emerald-100 dark:border-emerald-900/50 rounded-2xl p-4 bg-emerald-50/30 dark:bg-emerald-950/20">
                   <div className="flex items-center justify-between border-b border-emerald-100 dark:border-emerald-900/50 pb-2">
                     <span className="text-sm font-bold text-emerald-900 dark:text-emerald-100">المنتجات / الخدمات (البنود)</span>
@@ -551,7 +607,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                           toast.error("لقد قمت بإضافة جميع المنتجات المتاحة في هذا الطلب");
                           return;
                         }
-                        setOfferLines([...offerLines, { id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "" }]);
+                        setOfferLines([...offerLines, { id: Date.now().toString(), productId: "", price: "", productName: "", productCode: "", discount: "", tax: "", qty: "1" }]);
                       }}
                       className="text-xs bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-lg hover:bg-emerald-200 transition-colors"
                     >
@@ -563,59 +619,59 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                     const matchedProduct = request.agreedProducts?.find((p: any) => p.product_id === line.productId);
                     return (
                       <div key={line.id} className="bg-white dark:bg-[#03251c] p-4 rounded-xl shadow-sm border border-emerald-50 dark:border-emerald-900/30 space-y-3">
-                        {/* Row 1: Product selector */}
-                        {request.agreedProducts && request.agreedProducts.length > 0 && (
-                          <div className="input-group">
-                            <label className="text-[10px]">المنتج / الخدمة</label>
-                            <select
-                              value={line.productId}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const numVal = val ? Number(val) : "";
-                                const newLines = [...offerLines];
-                                newLines[index].productId = numVal;
-
-                                if (numVal) {
-                                  const prod = request.agreedProducts?.find((p: any) => p.product_id === numVal);
-                                  // Look up the product name from existing offerLines data (Odoo line name)
-                                  const existingLine = request.offerLines?.find((ol: any) => ol.product_id === numVal);
-                                  if (prod) {
-                                    newLines[index].price = prod.cost_price.toString();
-                                    newLines[index].productName = existingLine?.name || prod.provider_product_name || "";
-                                    newLines[index].productCode = prod.provider_product_code || "";
-                                  }
-                                } else {
-                                  newLines[index].price = "";
-                                  newLines[index].productName = "";
-                                  newLines[index].productCode = "";
-                                }
-                                setOfferLines(newLines);
-                              }}
-                              required
-                              className="w-full text-xs"
-                            >
-                              <option value="">-- اختر المنتج --</option>
-                              {request.agreedProducts.map((p: any) => {
-                                const isSelectedElsewhere = offerLines.some(l => l.id !== line.id && l.productId === p.product_id);
-                                // Get product name from existing Odoo lines first, then provider_product_name
-                                const lineForProduct = request.offerLines?.find((ol: any) => ol.product_id === p.product_id);
-                                const displayName = lineForProduct?.name || p.provider_product_name || `منتج ${p.product_id}`;
-                                return (
-                                  <option
-                                    key={p.product_id}
-                                    value={p.product_id}
-                                    disabled={isSelectedElsewhere}
-                                  >
-                                    {displayName} (التكلفة: {p.cost_price})
-                                  </option>
-                                );
-                              })}
-                            </select>
-                          </div>
-                        )}
-
-                        {/* Row 2: Product Name, Product Code, Price */}
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                          {/* Row 1: Product selector */}
+                          {request.agreedProducts && request.agreedProducts.length > 0 && (
+                            <div className="input-group md:col-span-4">
+                              <label className="text-[10px]">المنتج / الخدمة</label>
+                              <Select
+                                value={line.productId}
+                                onChange={(val) => {
+                                  const numVal = val ? Number(val) : "";
+                                  const newLines = [...offerLines];
+                                  newLines[index].productId = numVal;
+
+                                  if (numVal) {
+                                    const prod = request.agreedProducts?.find((p: any) => p.product_id === numVal);
+                                    // Look up the product name from existing offerLines data (Odoo line name)
+                                    const existingLine = request.offerLines?.find((ol: any) => ol.product_id === numVal);
+                                    if (prod) {
+                                      newLines[index].price = prod.cost_price.toString();
+                                      newLines[index].productName = existingLine?.name || prod.provider_product_name || "";
+                                      newLines[index].productCode = prod.provider_product_code || "";
+                                      newLines[index].discount = (prod.discount_percentage ?? 0).toString();
+                                      newLines[index].tax = (prod.tax ?? 0).toString();
+                                      newLines[index].qty = "1";
+                                    }
+                                  } else {
+                                    newLines[index].price = "";
+                                    newLines[index].productName = "";
+                                    newLines[index].productCode = "";
+                                    newLines[index].discount = "";
+                                    newLines[index].tax = "";
+                                    newLines[index].qty = "1";
+                                  }
+                                  setOfferLines(newLines);
+                                }}
+                                options={request.agreedProducts.map((p: any) => {
+                                  const isSelectedElsewhere = offerLines.some(l => l.id !== line.id && l.productId === p.product_id);
+                                  // Get product name from existing Odoo lines first, then provider_product_name
+                                  const lineForProduct = request.offerLines?.find((ol: any) => ol.product_id === p.product_id);
+                                  const displayName = lineForProduct?.name || p.provider_product_name || `منتج ${p.product_id}`;
+                                  return {
+                                    value: p.product_id,
+                                    label: `${displayName} (التكلفة: ${p.cost_price})`,
+                                    disabled: isSelectedElsewhere,
+                                  };
+                                })}
+                                placeholder="-- اختر المنتج --"
+                                showEmptyOption={true}
+                                emptyOptionLabel="-- اختر المنتج --"
+                                className="w-full text-xs"
+                              />
+                            </div>
+                          )}
+
                           <div className="input-group md:col-span-4">
                             <label className="text-[10px]">اسم المنتج</label>
                             <input
@@ -632,7 +688,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                             />
                           </div>
 
-                          <div className="input-group md:col-span-3">
+                          <div className="input-group md:col-span-4">
                             <label className="text-[10px]">كود المنتج</label>
                             <input
                               type="text"
@@ -647,8 +703,12 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                               readOnly={!!matchedProduct}
                             />
                           </div>
+                        </div>
 
-                          <div className="input-group md:col-span-3">
+                        {/* Row 2: Price, Quantity, Discount, Tax, Line Total, Actions */}
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+
+                          <div className="input-group md:col-span-2">
                             <label className="text-[10px] flex items-center gap-0.5">
                               السعر (بحد أقصى: {matchedProduct?.cost_price || 0}
                               <SaudiRiyalIcon size={8} />)
@@ -667,6 +727,66 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                               }}
                               placeholder="مثال: 500"
                               className="w-full text-xs"
+                            />
+                          </div>
+
+                          <div className="input-group md:col-span-2">
+                            <label className="text-[10px]">الكمية</label>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              required
+                              value={line.qty || "1"}
+                              onChange={(e) => {
+                                const newLines = [...offerLines];
+                                newLines[index].qty = e.target.value;
+                                setOfferLines(newLines);
+                              }}
+                              placeholder="1"
+                              className="w-full text-xs"
+                            />
+                          </div>
+
+                          <div className="input-group md:col-span-2">
+                            <label className="text-[10px]">الخصم (%)</label>
+                            <input
+                              type="text"
+                              readOnly
+                              value={line.discount ? `${line.discount}%` : "0%"}
+                              className="w-full text-xs bg-slate-100 dark:bg-slate-900/50 cursor-default"
+                            />
+                          </div>
+
+                          <div className="input-group md:col-span-2">
+                            <label className="text-[10px]">الضريبة (%)</label>
+                            <input
+                              type="text"
+                              readOnly
+                              value={line.tax ? `${line.tax}%` : "0%"}
+                              className="w-full text-xs bg-slate-100 dark:bg-slate-900/50 cursor-default"
+                            />
+                          </div>
+
+                          <div className="input-group md:col-span-2">
+                            <label className="text-[10px] flex items-center gap-0.5">
+                              الإجمالي الشامل
+                              <SaudiRiyalIcon size={8} />
+                            </label>
+                            <input
+                              type="text"
+                              readOnly
+                              value={(() => {
+                                const price = parseFloat(line.price) || 0;
+                                const qty = parseFloat(line.qty || "1") || 1;
+                                const disc = parseFloat(line.discount || "0") || 0;
+                                const tx = parseFloat(line.tax || "0") || 0;
+                                const subtotal = price * qty;
+                                const priceAfterDiscount = subtotal * (1 - disc / 100);
+                                const lineTotal = priceAfterDiscount * (1 + tx / 100);
+                                return lineTotal.toFixed(2);
+                              })()}
+                              className="w-full text-xs bg-slate-100 dark:bg-slate-900/50 font-bold text-emerald-700 dark:text-emerald-400 cursor-default"
                             />
                           </div>
 
@@ -690,22 +810,21 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
                   })}
 
                   <div className="flex justify-between items-center pt-2 px-2 text-sm">
-                    <span className="font-bold text-slate-600 dark:text-slate-400">الإجمالي:</span>
+                    <span className="font-bold text-slate-600 dark:text-slate-400">الإجمالي الشامل (شامل الخصم والضريبة):</span>
                     <span className="font-extrabold text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
-                      {offerLines.reduce((acc, curr) => acc + (parseFloat(curr.price) || 0), 0).toFixed(2)}
+                      {offerLines.reduce((acc, curr) => {
+                        const price = parseFloat(curr.price) || 0;
+                        const qty = parseFloat(curr.qty || "1") || 1;
+                        const disc = parseFloat(curr.discount || "0") || 0;
+                        const tx = parseFloat(curr.tax || "0") || 0;
+                        const subtotal = price * qty;
+                        const afterDisc = subtotal * (1 - disc / 100);
+                        const lineTot = afterDisc * (1 + tx / 100);
+                        return acc + lineTot;
+                      }, 0).toFixed(2)}
                       <SaudiRiyalIcon size={12} />
                     </span>
                   </div>
-                </div>
-
-                <div className="input-group mt-4">
-                  <label>ملاحظات إضافية (اختياري)</label>
-                  <input
-                    type="text"
-                    placeholder="فترة التشغيل، التفاصيل، إلخ..."
-                    value={providerNote}
-                    onChange={(e) => setProviderNote(e.target.value)}
-                  />
                 </div>
 
                 <button
@@ -810,6 +929,12 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
       </div>
+
+      <AttachmentPreview
+        isOpen={Boolean(previewAttachment)}
+        onClose={() => setPreviewAttachment(null)}
+        file={previewAttachment}
+      />
     </div>
   );
 }

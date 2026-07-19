@@ -5,28 +5,43 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { 
   FileText, 
-  Search, 
   Calendar,
   Building,
   Activity,
   X,
-  Coins
+  Coins,
+  User, 
+  Phone, 
+  IdCard
 } from "lucide-react";
 import toast from "react-hot-toast";
 import DatePicker from "@/components/ui/DatePicker";
 import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
+import SearchBar, { SearchFieldOption, SearchTag } from "@/components/ui/SearchBar";
 
 interface ClaimItem {
   id: string;
   purchaseOrderId: number;
   requestNumber: string;
   providerName: string;
+  beneficiaryName?: string;
+  beneficiaryMobile?: string;
+  beneficiaryID?: string;
   serviceCost: number;
   subServiceType: string;
   requestDate: string;
   charity: { name: string };
   claimStatus?: string;
 }
+
+const CLAIM_SEARCH_FIELDS: SearchFieldOption[] = [
+  { key: "requestNumber", label: "رقم الطلب" },
+  { key: "beneficiaryName", label: "اسم المستفيد" },
+  { key: "beneficiaryMobile", label: "رقم الجوال" },
+  { key: "beneficiaryID", label: "رقم الهوية" },
+  { key: "charity", label: "الجمعية" },
+  { key: "all", label: "عام" },
+];
 
 export default function ClaimsPage() {
   const searchParams = useSearchParams();
@@ -36,7 +51,8 @@ export default function ClaimsPage() {
   const [loading, setLoading] = useState(true);
 
   // Filter & Search states
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTags, setSearchTags] = useState<SearchTag[]>([]);
+  const [rawQuery, setRawQuery] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
@@ -83,7 +99,7 @@ export default function ClaimsPage() {
     return () => clearTimeout(timer);
   }, [loadData]);
 
-  // Filter claims during render
+  // Filter claims during render (search logic)
   const filteredClaims = claims.filter((c) => {
     // Status Filter
     if (selectedStatus !== "all") {
@@ -94,14 +110,50 @@ export default function ClaimsPage() {
       }
     }
 
-    // Search filter
-    if (searchTerm.trim() !== "") {
-      const term = searchTerm.toLowerCase();
-      const matchesSearch =
-        c.requestNumber.toLowerCase().includes(term) ||
-        c.providerName.toLowerCase().includes(term) ||
-        c.subServiceType.toLowerCase().includes(term);
-      if (!matchesSearch) return false;
+    // Search Tags & Raw query matching
+    if (searchTags.length > 0 || rawQuery.trim() !== "") {
+      // 1) All committed search tags
+      for (const tag of searchTags) {
+        const val = tag.value.toLowerCase();
+        if (tag.fieldKey === "beneficiaryName") {
+          if (!c.beneficiaryName?.toLowerCase().includes(val)) return false;
+        } else if (tag.fieldKey === "beneficiaryID") {
+          if (!c.beneficiaryID?.toLowerCase().includes(val)) return false;
+        } else if (tag.fieldKey === "beneficiaryMobile") {
+          if (!c.beneficiaryMobile?.toLowerCase().includes(val)) return false;
+        } else if (tag.fieldKey === "requestNumber") {
+          if (!c.requestNumber.toLowerCase().includes(val)) return false;
+        } else if (tag.fieldKey === "charity") {
+          if (!c.charity?.name?.toLowerCase().includes(val)) return false;
+        } else if (tag.fieldKey === "providerName") {
+          if (!c.providerName?.toLowerCase().includes(val)) return false;
+        } else {
+          // "all"
+          const matches =
+            c.requestNumber.toLowerCase().includes(val) ||
+            c.providerName.toLowerCase().includes(val) ||
+            c.subServiceType.toLowerCase().includes(val) ||
+            (c.beneficiaryName && c.beneficiaryName.toLowerCase().includes(val)) ||
+            (c.beneficiaryMobile && c.beneficiaryMobile.toLowerCase().includes(val)) ||
+            (c.beneficiaryID && c.beneficiaryID.toLowerCase().includes(val)) ||
+            (c.charity?.name && c.charity.name.toLowerCase().includes(val));
+          if (!matches) return false;
+        }
+      }
+
+      // 2) Active uncommitted input query
+      if (rawQuery.trim() !== "") {
+        const val = rawQuery.trim().toLowerCase();
+        const matchesRaw =
+          c.requestNumber.toLowerCase().includes(val) ||
+          c.providerName.toLowerCase().includes(val) ||
+          c.subServiceType.toLowerCase().includes(val) ||
+          (c.beneficiaryName && c.beneficiaryName.toLowerCase().includes(val)) ||
+          (c.beneficiaryMobile && c.beneficiaryMobile.toLowerCase().includes(val)) ||
+          (c.beneficiaryID && c.beneficiaryID.toLowerCase().includes(val)) ||
+          (c.charity?.name && c.charity.name.toLowerCase().includes(val));
+        if (!matchesRaw) return false;
+      }
     }
 
     // Date range filter - From Date
@@ -138,20 +190,18 @@ export default function ClaimsPage() {
 
       {/* Filters Bar */}
       <div className="bg-white dark:bg-[#03251c] rounded-3xl p-5 border border-emerald-100/50 dark:border-emerald-950/40 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end animate-fadeIn">
-          {/* Search Field */}
-          <div className="space-y-1.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end animate-fadeIn">
+          {/* Style Search Bar */}
+          <div className="space-y-1.5 md:col-span-2 lg:col-span-2">
             <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">البحث</label>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="البحث برقم الطلب أو اسم المزود..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full h-10 rounded-xl border border-emerald-100 dark:border-emerald-950 bg-emerald-50/30 dark:bg-[#021b14] pl-10 pr-4 text-xs text-emerald-950 dark:text-white outline-none focus:border-emerald-500 transition-all placeholder-emerald-600/40 dark:placeholder-emerald-400/40"
-              />
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-600/60 dark:text-emerald-400 h-4 w-4 pointer-events-none" />
-            </div>
+            <SearchBar
+              placeholder="البحث برقم الطلب، اسم المستفيد، الهوية، الجوال، الجمعية..."
+              searchFields={CLAIM_SEARCH_FIELDS}
+              tags={searchTags}
+              onTagsChange={setSearchTags}
+              rawQuery={rawQuery}
+              onRawQueryChange={setRawQuery}
+            />
           </div>
 
           {/* Status Filter Dropdown */}
@@ -192,16 +242,17 @@ export default function ClaimsPage() {
         </div>
 
         {/* Clear Filters Button */}
-        {(searchTerm || startDate || endDate || selectedStatus !== "all") && (
+        {(searchTags.length > 0 || rawQuery !== "" || startDate || endDate || selectedStatus !== "all") && (
           <div className="flex justify-end pt-1">
             <button
               onClick={() => {
-                setSearchTerm("");
+                setSearchTags([]);
+                setRawQuery("");
                 setStartDate("");
                 setEndDate("");
                 setSelectedStatus("all");
               }}
-              className="text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 transition-colors flex items-center gap-1.5"
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <X size={14} />
               <span>إعادة تعيين الفلاتر</span>
@@ -249,21 +300,45 @@ export default function ClaimsPage() {
               </p>
 
               {/* Info Metadata */}
-              <div className="grid grid-cols-2 gap-3 text-xs border-t border-b border-emerald-50/50 dark:border-emerald-950/40 py-3 text-slate-500 dark:text-slate-400">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 text-xs border-t border-b border-emerald-50/50 dark:border-emerald-950/40 py-3 text-slate-500 dark:text-slate-400">
                 <div className="flex items-center gap-1.5">
                   <Building size={14} className="text-emerald-600" />
                   <span className="truncate">{claim.charity.name}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Calendar size={14} className="text-emerald-600" />
-                  <span>{new Date(claim.requestDate).toLocaleDateString("ar-SA")}</span>
-                </div>
-                <div className="flex items-center gap-1.5 col-span-2">
                   <Activity size={14} className="text-emerald-600" />
                   <span className="truncate">
                     المزود المعين: <strong className="text-emerald-950 dark:text-emerald-300 font-semibold">{claim.providerName}</strong>
                   </span>
                 </div>
+                <div className="flex items-center gap-1.5">
+                  <Calendar size={14} className="text-emerald-600" />
+                  <span>{new Date(claim.requestDate).toLocaleDateString("ar-SA")}</span>
+                </div>
+                {claim.beneficiaryName && (
+                  <div className="flex items-center gap-1.5">
+                    <User size={14} className="text-emerald-600" />
+                    <span className="truncate">
+                      <strong className="text-emerald-950 dark:text-emerald-300 font-semibold">{claim.beneficiaryName}</strong>
+                    </span>
+                  </div>
+                )}
+                {claim.beneficiaryMobile && (
+                  <div className="flex items-center gap-1.5">
+                    <Phone size={14} className="text-emerald-600" />
+                    <span className="truncate">
+                      <strong className="text-emerald-950 dark:text-emerald-300 font-semibold">{claim.beneficiaryMobile}</strong>
+                    </span>
+                  </div>
+                )}
+                {claim.beneficiaryID && (
+                  <div className="flex items-center gap-1.5">
+                    <IdCard size={14} className="text-emerald-600" />
+                    <span className="truncate">
+                      <strong className="text-emerald-950 dark:text-emerald-300 font-semibold">{claim.beneficiaryID}</strong>
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Pricing / Cost */}

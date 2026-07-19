@@ -311,6 +311,7 @@ export async function fetchRFQsFromOdoo(session: SessionPayload) {
             name: offer.offer_partner_name || "مزود خدمة خارجي",
           },
           priceOffers: [],
+          requestNumber: offer.request_number || "",
         };
       });
 
@@ -361,19 +362,22 @@ export async function fetchClaimsFromOdoo(session: SessionPayload) {
       const body = await res.json();
       const claims = body?.data?.raising_claim || [];
       for (const claim of claims) {
-        apiClaims.push({
-          id: `${claim.purchase_order_id}-${claim.request_number}`,
-          purchaseOrderId: claim.purchase_order_id,
-          requestNumber: claim.request_number,
-          providerName: claim.provider_name || "مزود خدمة خارجي",
-          serviceCost: claim.service_cost || 0,
-          subServiceType: claim.sub_service_type || "",
-          claimStatus: claim.claim_status,
-          requestDate: claim.request_date
-            ? new Date(claim.request_date).toISOString()
-            : new Date().toISOString(),
-          charity: { name: charity.name },
-        });
+          apiClaims.push({
+            id: `${claim.purchase_order_id}-${claim.request_number}`,
+            purchaseOrderId: claim.purchase_order_id,
+            requestNumber: claim.request_number,
+            providerName: claim.provider_name || "مزود خدمة خارجي",
+            beneficiaryName: claim.beneficiary_name || "",
+            beneficiaryMobile: claim.beneficiary_mobile || "",
+            beneficiaryID: claim.beneficiary_ID || "",
+            serviceCost: claim.service_cost || 0,
+            subServiceType: claim.sub_service_type || "",
+            claimStatus: claim.claim_status,
+            requestDate: claim.request_date
+              ? new Date(claim.request_date).toISOString()
+              : new Date().toISOString(),
+            charity: { name: charity.name },
+          });
       }
     } catch (err) {
       console.error(`Odoo Claims connection error for charity ${charity.id}:`, err);
@@ -421,6 +425,7 @@ export async function fetchClaimDetailFromOdoo(session: SessionPayload, purchase
           requestNumber: claim.request_number,
           beneficiaryName: claim.beneficiary_name || "مستفيد خارجي",
           beneficiaryMobile: claim.beneficiary_mobile || "",
+          beneficiaryID: claim.beneficiary_ID || "",
           beneficiaryEmail: claim.beneficiary_email || "",
           claimStatus: claim.claim_status,
           updateClaimReason: claim.update_claim_reason || "",

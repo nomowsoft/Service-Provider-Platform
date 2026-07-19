@@ -19,20 +19,28 @@ import {
   Clock,
   Loader2,
   Trash2,
-  Plus
+  Plus, 
+  Hash,
+  Paperclip,
+  Eye,
+  IdCard
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { SaudiRiyalIcon } from "@/components/ui/SaudiRiyalIcon";
 import { raisingClaimSchema, updateClaimSchema } from "@/utils/validation";
 import DatePicker from "@/components/ui/DatePicker";
+import AttachmentPreview from "@/components/ui/AttachmentPreview";
 
 interface ClaimLine {
   line_id: number;
   name: string;
   price_subtotal: number;
+  price_total?: number;
   price_unit: number;
   product_id: number;
   product_qty: number;
+  discount_percentage?: number;
+  taxes_ids?: number[];
 }
 
 interface InvoiceLine {
@@ -40,14 +48,18 @@ interface InvoiceLine {
   name: string;
   price_unit: number;
   price_subtotal: number;
+  price_total?: number;
   product_id: number;
   quantity: number;
+  discount_percentage?: number;
+  taxes_ids?: number[];
 }
 
 interface Attachment {
   attachment_id: number;
   name: string;
   url: string;
+  mimetype: string;
 }
 
 interface Invoice {
@@ -63,6 +75,7 @@ interface ClaimDetail {
   requestNumber: string;
   beneficiaryName: string;
   beneficiaryMobile: string;
+  beneficiaryID: string;
   beneficiaryEmail: string;
   claimStatus: string;
   updateClaimReason: string;
@@ -84,20 +97,20 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [invoiceRef, setInvoiceRef] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
-  const [attachments, setAttachments] = useState<{ attachment_id?: number; name: string; datas?: string; url?: string }[]>([]);
+  const [attachments, setAttachments] = useState<{ attachment_id?: number; name: string; datas?: string; url?: string; mimetype?: string }[]>([]);
   const [invoiceLines, setInvoiceLines] = useState<{ productId: number; priceUnit: string; name: string; qty: number }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [submittingInvoice, setSubmittingInvoice] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [isAddingLine, setIsAddingLine] = useState(false);
-  const [selectedPreviewAtt, setSelectedPreviewAtt] = useState<{ url: string; name: string } | null>(null);
+  const [selectedPreviewAtt, setSelectedPreviewAtt] = useState<{ url: string; name: string; mimetype: string } | null>(null);
   const isEditing = !!(claim && claim.invoices && claim.invoices.length > 0);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     setUploading(true);
     const files = Array.from(e.target.files);
-    const newAttachments: { attachment_id?: number; name: string; datas: string; url?: string }[] = [];
+    const newAttachments: { attachment_id?: number; name: string; datas: string; url?: string; mimetype?: string }[] = [];
 
     for (const file of files) {
       try {
@@ -187,6 +200,7 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
             invoice_lines: activeLines.map(l => ({
               product_id: l.productId,
               price_unit: parseFloat(l.priceUnit) || 0,
+              quantity: l.qty || 1,
             })),
           }
         ]
@@ -200,6 +214,7 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
         invoice_lines: activeLines.map(l => ({
           product_id: l.productId,
           price_unit: parseFloat(l.priceUnit) || 0,
+          quantity: l.qty || 1,
         })),
       });
     }
@@ -212,9 +227,15 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
     for (const line of activeLines) {
       const priceVal = parseFloat(line.priceUnit);
       const originalLine = claim?.lines.find(l => l.product_id === line.productId);
-      if (originalLine && priceVal > originalLine.price_unit) {
-        toast.error(`سعر البند "${line.name}" لا يمكن أن يتجاوز السعر المعتمد (${originalLine.price_unit})`);
-        return;
+      if (originalLine) {
+        if (priceVal > originalLine.price_unit) {
+          toast.error(`سعر البند "${line.name}" لا يمكن أن يتجاوز السعر المعتمد (${originalLine.price_unit})`);
+          return;
+        }
+        if (line.qty <= 0) {
+          toast.error(`كمية البند "${line.name}" يجب أن تكون أكبر من الصفر`);
+          return;
+        }
       }
     }
 
@@ -235,6 +256,7 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                 invoice_lines: activeLines.map(l => ({
                   product_id: l.productId,
                   price_unit: parseFloat(l.priceUnit),
+                  quantity: l.qty || 1,
                 })),
               }
             ]
@@ -246,6 +268,7 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
             invoice_lines: activeLines.map(l => ({
               product_id: l.productId,
               price_unit: parseFloat(l.priceUnit),
+              quantity: l.qty || 1,
             })),
           });
 
@@ -289,12 +312,6 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
       }
       const data = await res.json();
       setClaim(data.claim);
-      if (data.claim && data.claim.invoices?.[0]?.attachments?.[0]) {
-        setSelectedPreviewAtt({
-          url: data.claim.invoices[0].attachments[0].url,
-          name: data.claim.invoices[0].attachments[0].name,
-        });
-      }
       if (data.claim && data.claim.lines) {
         setInvoiceLines(data.claim.lines.map((l: any) => ({
           productId: l.product_id,
@@ -344,9 +361,9 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
   // Calculate total amount: sum invoice lines if invoices exist, otherwise sum claim lines
   const totalAmount = claim.invoices && claim.invoices.length > 0
     ? claim.invoices.reduce((sumInv, inv) => 
-        sumInv + (inv.invoice_lines || []).reduce((sumLine, line) => sumLine + (line.price_subtotal || 0), 0)
+        sumInv + (inv.invoice_lines || []).reduce((sumLine, line) => sumLine + (line.price_total ?? line.price_subtotal ?? 0), 0)
       , 0)
-    : claim.lines.reduce((sum, line) => sum + line.price_subtotal, 0);
+    : claim.lines.reduce((sum, line) => sum + (line.price_total ?? line.price_subtotal), 0);
 
   return (
     <div className="space-y-6">
@@ -364,7 +381,8 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
               <h1 className="text-2xl font-extrabold text-emerald-950 dark:text-white">
                 تفاصيل المطالبة المالية
               </h1>
-              <span className="text-xs font-extrabold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-1 rounded-lg border border-emerald-100/50 dark:border-emerald-900/60">
+              <span className="text-xs font-extrabold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-1 rounded-lg border border-emerald-100/50 dark:border-emerald-900/60 flex items-center">
+                <Hash className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                 {claim.requestNumber}
               </span>
             </div>
@@ -436,7 +454,17 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                     <Phone size={12} className="text-emerald-600" />
                     <span>رقم الجوال</span>
                   </span>
-                  <p className="text-sm font-extrabold text-emerald-950 dark:text-white mt-0.5" dir="ltr">{claim.beneficiaryMobile}</p>
+                  <p className="text-sm font-extrabold text-emerald-950 dark:text-white mt-0.5">{claim.beneficiaryMobile}</p>
+                </div>
+              )}
+
+              {claim.beneficiaryID && (
+                <div className="space-y-1 bg-emerald-50/20 dark:bg-[#021b14] p-3 rounded-2xl border border-emerald-50/50 dark:border-emerald-950/20">
+                  <span className="text-slate-400 font-bold flex items-center gap-1">
+                    <IdCard size={12} className="text-emerald-600" />
+                    <span>رقم الهوية</span>
+                  </span>
+                  <p className="text-sm font-extrabold text-emerald-950 dark:text-white mt-0.5">{claim.beneficiaryID}</p>
                 </div>
               )}
 
@@ -480,8 +508,11 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                 </p>
               </div>
               <div className="space-y-0.5">
-                <span className="text-slate-400 font-bold">رقم أمر الشراء</span>
-                <p className="text-sm font-extrabold text-emerald-950 dark:text-white">#{claim.purchaseOrderId}</p>
+                <span className="text-slate-400 font-bold">رقم الطلب</span>
+                <p className="text-sm font-extrabold text-emerald-950 dark:text-white flex items-center">
+                  <Hash className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                  {claim.requestNumber}
+                </p>
               </div>
             </div>
 
@@ -495,7 +526,9 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                       <th className="px-4 py-3">البند</th>
                       <th className="px-4 py-3 text-center">الكمية</th>
                       <th className="px-4 py-3 text-left">سعر الوحدة</th>
-                      <th className="px-4 py-3 text-left">الإجمالي</th>
+                      <th className="px-4 py-3 text-center">الخصم (%)</th>
+                      <th className="px-4 py-3 text-center">الضريبة (%)</th>
+                      <th className="px-4 py-3 text-left">الإجمالي الشامل</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-emerald-50 dark:divide-emerald-950/30">
@@ -509,9 +542,17 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                             <SaudiRiyalIcon size={10} />
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-center">
+                          {line.discount_percentage ? `${line.discount_percentage}%` : "0%"}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {line.taxes_ids && line.taxes_ids.length > 0
+                            ? `${line.taxes_ids.join("%, ")}%`
+                            : "0%"}
+                        </td>
                         <td className="px-4 py-3 text-left font-bold text-emerald-900 dark:text-emerald-200">
                           <span className="inline-flex items-center gap-1">
-                            {line.price_subtotal.toLocaleString()}
+                            {(line.price_total ?? line.price_subtotal).toLocaleString()}
                             <SaudiRiyalIcon size={10} />
                           </span>
                         </td>
@@ -549,7 +590,7 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                       className="w-full text-xs"
                     />
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="input-group">
                     <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">تاريخ الفاتورة</label>
                     <DatePicker
                       value={invoiceDate}
@@ -582,7 +623,7 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                             {/* Line header & Remove button */}
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-bold text-slate-750 dark:text-slate-200">
-                                {line.name} <span className="text-slate-400 dark:text-slate-500 font-normal">({`×${line.qty}`})</span>
+                                {line.name}
                               </span>
                               
                               <button
@@ -598,27 +639,90 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                               </button>
                             </div>
 
-                            {/* Price input field */}
-                            <div className="input-group">
-                              <label className="text-[10px] flex items-center gap-0.5">
-                                سعر الوحدة (بحد أقصى: {originalLine?.price_unit}
-                                <SaudiRiyalIcon size={8} />)
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0.01"
-                                max={originalLine?.price_unit}
-                                required
-                                value={line.priceUnit}
-                                onChange={(e) => {
-                                  const updated = [...invoiceLines];
-                                  updated[masterIndex].priceUnit = e.target.value;
-                                  setInvoiceLines(updated);
-                                }}
-                                className="w-full text-xs"
-                              />
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              {/* Price input field */}
+                              <div className="input-group">
+                                <label className="text-[10px] flex items-center gap-0.5">
+                                  سعر الوحدة (بحد أقصى: {originalLine?.price_unit}
+                                  <SaudiRiyalIcon size={8} />)
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0.01"
+                                  max={originalLine?.price_unit}
+                                  required
+                                  value={line.priceUnit}
+                                  onChange={(e) => {
+                                    const updated = [...invoiceLines];
+                                    updated[masterIndex].priceUnit = e.target.value;
+                                    setInvoiceLines(updated);
+                                  }}
+                                  className="w-full text-xs"
+                                />
+                              </div>
+
+                              {/* Quantity input field */}
+                              <div className="input-group">
+                                <label className="text-[10px]">الكمية</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  required
+                                  value={line.qty || ""}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value);
+                                    const updated = [...invoiceLines];
+                                    updated[masterIndex].qty = isNaN(val) ? "" as any : val;
+                                    setInvoiceLines(updated);
+                                  }}
+                                  className="w-full text-xs"
+                                />
+                              </div>
+
+                              {/* Discount readOnly field */}
+                              <div className="input-group">
+                                <label className="text-[10px]">الخصم (%)</label>
+                                <input
+                                  type="text"
+                                  readOnly
+                                  value={originalLine?.discount_percentage ? `${originalLine.discount_percentage}%` : "0%"}
+                                  className="w-full text-xs bg-slate-100 dark:bg-slate-900/50 cursor-default"
+                                />
+                              </div>
+
+                              {/* Tax readOnly field */}
+                              <div className="input-group">
+                                <label className="text-[10px]">الضريبة (%)</label>
+                                <input
+                                  type="text"
+                                  readOnly
+                                  value={originalLine?.taxes_ids && originalLine.taxes_ids.length > 0
+                                    ? `${originalLine.taxes_ids.join("%, ")}%`
+                                    : "0%"}
+                                  className="w-full text-xs bg-slate-100 dark:bg-slate-900/50 cursor-default"
+                                />
+                              </div>
                             </div>
+
+                            <div className="flex justify-between items-center text-xs border-t border-emerald-50 dark:border-emerald-950/20 pt-2 mt-1">
+                              <span className="text-[10px] text-slate-500">الإجمالي الشامل (شامل الخصم والضريبة):</span>
+                              <span className="font-extrabold text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-0.5">
+                                {(() => {
+                                  const price = parseFloat(line.priceUnit) || 0;
+                                  const qty = Number(line.qty) || 1;
+                                  const disc = originalLine?.discount_percentage || 0;
+                                  const tx = originalLine?.taxes_ids?.reduce((a, b) => a + b, 0) || 0;
+                                  const subtotal = price * qty;
+                                  const priceAfterDiscount = subtotal * (1 - disc / 100);
+                                  const lineTotal = priceAfterDiscount * (1 + tx / 100);
+                                  return lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                })()}
+                                <SaudiRiyalIcon size={9} />
+                              </span>
+                            </div>
+
                           </div>
                         );
                       })}
@@ -701,16 +805,28 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                   </div>
 
                   {attachments.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
                       {attachments.map((att, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-[#021b14] border border-emerald-50 dark:border-emerald-950/40 text-xs">
-                          <span className="truncate max-w-[150px] font-semibold text-[11px]">{att.name}</span>
+                        <div
+                          key={idx}
+                          className="group flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/20 dark:bg-emerald-950/10 border border-emerald-100/50 dark:border-emerald-900/30 hover:border-emerald-200 dark:hover:border-emerald-800 transition-all duration-200 shadow-sm hover:shadow-md"
+                        >
+                          <div
+                            className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1"
+                            onClick={() => att.url && setSelectedPreviewAtt({ url: att.url, name: att.name, mimetype: att.mimetype || "" })}
+                          >
+                            <Paperclip size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0 group-hover:rotate-12 transition-transform" />
+                            <span className="truncate text-[11px] font-semibold text-emerald-950 dark:text-emerald-200" title={att.name}>
+                              {att.name}
+                            </span>
+                          </div>
                           <button
                             type="button"
                             onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
-                            className="text-rose-500 hover:text-rose-700 font-bold shrink-0 ml-1 text-xs"
+                            className="p-1 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all shrink-0 ml-1"
+                            title="حذف المرفق"
                           >
-                            حذف
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       ))}
@@ -776,19 +892,50 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                       </span>
                     </div>
 
-                    {/* Invoice Lines */}
+                     {/* Invoice Lines */}
                     <div className="space-y-2">
                       <h4 className="text-[11px] font-bold text-emerald-950 dark:text-white opacity-85">تفاصيل الفاتورة:</h4>
-                      <div className="space-y-1.5">
-                        {inv.invoice_lines.map((line) => (
-                          <div key={line.line_id} className="flex justify-between items-center text-xs text-slate-600 dark:text-slate-300">
-                            <span>{line.name} (×{line.quantity})</span>
-                            <span className="inline-flex items-center gap-1">
-                              {line.price_subtotal.toLocaleString()}
-                              <SaudiRiyalIcon size={10} />
-                            </span>
-                          </div>
-                        ))}
+                      <div className="overflow-x-auto rounded-xl border border-emerald-100/30 dark:border-emerald-950/20">
+                        <table className="w-full text-right text-[10px]">
+                          <thead className="bg-emerald-50/30 dark:bg-[#021b14]/30 text-emerald-800 dark:text-emerald-300 font-bold">
+                            <tr>
+                              <th className="px-3 py-2">البند</th>
+                              <th className="px-3 py-2 text-center">الكمية</th>
+                              <th className="px-3 py-2 text-left">سعر الوحدة</th>
+                              <th className="px-3 py-2 text-center">الخصم (%)</th>
+                              <th className="px-3 py-2 text-center">الضريبة (%)</th>
+                              <th className="px-3 py-2 text-left">الإجمالي الشامل</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-emerald-50/50 dark:divide-emerald-950/25">
+                            {inv.invoice_lines.map((line) => (
+                              <tr key={line.line_id} className="text-slate-600 dark:text-slate-300">
+                                <td className="px-3 py-2 font-medium">{line.name}</td>
+                                <td className="px-3 py-2 text-center">{line.quantity}</td>
+                                <td className="px-3 py-2 text-left">
+                                  <span className="inline-flex items-center gap-0.5">
+                                    {line.price_unit.toLocaleString()}
+                                    <SaudiRiyalIcon size={8} />
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  {line.discount_percentage ? `${line.discount_percentage}%` : "0%"}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  {line.taxes_ids && line.taxes_ids.length > 0
+                                    ? `${line.taxes_ids.join("%, ")}%`
+                                    : "0%"}
+                                </td>
+                                <td className="px-3 py-2 text-left font-bold text-emerald-900 dark:text-emerald-200">
+                                  <span className="inline-flex items-center gap-0.5">
+                                    {(line.price_total ?? line.price_subtotal).toLocaleString()}
+                                    <SaudiRiyalIcon size={8} />
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
 
@@ -803,16 +950,20 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                               <button
                                 key={att.attachment_id}
                                 type="button"
-                                onClick={() => setSelectedPreviewAtt({ url: att.url, name: att.name })}
-                                className={`flex items-center justify-between p-2 rounded-xl border text-xs transition-all group w-full text-right ${
+                                onClick={() => setSelectedPreviewAtt({ url: att.url, name: att.name, mimetype: att.mimetype })}
+                                className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all duration-200 group w-full text-right ${
                                   isSelected
-                                    ? "bg-emerald-550/15 dark:bg-emerald-950/60 border-emerald-500 text-emerald-900 dark:text-emerald-100 font-bold"
-                                    : "bg-white dark:bg-[#021b14] border-emerald-50 dark:border-emerald-950/40 text-emerald-950 dark:text-emerald-100 hover:border-emerald-300 dark:hover:border-emerald-800"
+                                    ? "bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 text-emerald-900 dark:text-emerald-100 font-bold shadow-sm"
+                                    : "bg-white dark:bg-[#021b14] border-emerald-100/50 dark:border-emerald-950/40 text-emerald-950 dark:text-emerald-100 hover:border-emerald-300 dark:hover:border-emerald-800 shadow-sm hover:shadow-md"
                                 }`}
                               >
-                                <span className="truncate max-w-[120px] font-semibold text-[11px]">{att.name}</span>
-                                <div className="flex items-center gap-1.5 shrink-0 ml-1">
-                                  <span className="text-[10px] text-emerald-600 underline opacity-0 group-hover:opacity-100 transition-opacity">معاينة</span>
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                  <Paperclip size={14} className={`shrink-0 transition-transform ${isSelected ? "text-emerald-600 dark:text-emerald-400 rotate-12" : "text-emerald-600/60 dark:text-emerald-400/60 group-hover:rotate-12"}`} />
+                                  <span className="truncate max-w-[150px] font-semibold text-[11px]">{att.name}</span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0 ml-1">
+                                  <Eye size={12} className={`transition-all ${isSelected ? "text-emerald-600 dark:text-emerald-400 scale-110 opacity-100" : "text-emerald-600/40 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 opacity-0 group-hover:opacity-100"}`} />
+                                  <span className={`text-[10px] underline transition-all ${isSelected ? "text-emerald-750 dark:text-emerald-300 font-bold opacity-100" : "text-emerald-600 opacity-0 group-hover:opacity-100"}`}>معاينة</span>
                                 </div>
                               </button>
                             );
@@ -837,24 +988,11 @@ export default function ClaimDetailPage({ params }: { params: Promise<{ id: stri
                   </div>
                 ))}
 
-                {selectedPreviewAtt && (
-                  <div className="space-y-2 pt-4 border-t border-emerald-50 dark:border-emerald-950/25 animate-fadeIn">
-                    <span className="text-xs font-bold text-emerald-800 dark:text-emerald-400 flex items-center gap-1">
-                      <FileCheck2 size={14} className="text-emerald-600" />
-                      معاينة المستند المالي: <span className="font-semibold text-slate-700 dark:text-slate-200">{selectedPreviewAtt.name}</span>
-                    </span>
-                    <div className="w-full rounded-2xl overflow-hidden border-2 border-slate-100 dark:border-gray-800 bg-slate-50 dark:bg-gray-900 h-[600px] shadow-inner relative group">
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <Loader2 size={32} className="animate-spin text-emerald-600 dark:text-emerald-400" />
-                      </div>
-                      <iframe
-                        src={`${selectedPreviewAtt.url}#view=FitH`}
-                        className="w-full h-full border-0 absolute inset-0 z-10 bg-transparent"
-                        title="معاينة المستند"
-                      ></iframe>
-                    </div>
-                  </div>
-                )}
+                <AttachmentPreview
+                  isOpen={Boolean(selectedPreviewAtt)}
+                  onClose={() => setSelectedPreviewAtt(null)}
+                  file={selectedPreviewAtt}
+                />
               </div>
             )}
           </div>

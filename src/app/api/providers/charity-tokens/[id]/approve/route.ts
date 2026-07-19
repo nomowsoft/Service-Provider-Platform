@@ -66,6 +66,32 @@ export async function POST(
       );
     }
 
+    // Handle data update approval
+    if (charity.status === "UPDATING") {
+      await prisma.charity.update({
+        where: { id: charity.id },
+        data: {
+          status: "CONNECTED",
+          name: charity.pendingName || charity.name,
+          email: charity.pendingEmail || charity.email,
+          phone: charity.pendingPhone || charity.phone,
+          domain: charity.pendingDomain || charity.domain,
+          pendingName: null,
+          pendingEmail: null,
+          pendingPhone: null,
+          pendingDomain: null,
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: "تم اعتماد طلب تحديث البيانات بنجاح وتم تحديث بيانات الجمعية",
+        },
+        { status: 200 }
+      );
+    }
+
     // Check status
     if (charity.status !== "REQUESTED") {
       return NextResponse.json(
