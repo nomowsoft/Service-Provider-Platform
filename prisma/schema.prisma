@@ -15,13 +15,34 @@ model User {
   email            String           @unique
   password         String
   name             String
-  role             String           // "SUPER_ADMIN", "CHARITY_STAFF", "SERVICE_PROVIDER"
-  charityId        Int?
-  charity          Charity?         @relation(fields: [charityId], references: [id], onDelete: Cascade)
+  role             String           // "SUPER_ADMIN", "SERVICE_PROVIDER"
+  resetToken       String?          @unique
+  resetTokenExpiry DateTime?
   providerId       Int?
   provider         ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
+}
+
+model SmtpSetting {
+  id        Int      @id @default(1)
+  host      String   @default("")
+  port      Int      @default(587)
+  secure    Boolean  @default(false)
+  user      String   @default("")
+  password  String   @default("")
+  fromEmail String   @default("")
+  fromName  String   @default("فريق دعم سرب")
+  updatedAt DateTime @updatedAt
+}
+
+model EmailLog {
+  id        Int      @id @default(autoincrement())
+  toEmail   String
+  subject   String
+  status    String   // "SUCCESS", "FAILED", "MOCK"
+  error     String?
+  createdAt DateTime @default(now())
 }
 
 model Charity {
@@ -42,7 +63,6 @@ model Charity {
   connectedAt   DateTime?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
-  users         User[]
 }
 
 model ServiceProvider {

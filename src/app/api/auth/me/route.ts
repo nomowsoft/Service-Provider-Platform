@@ -15,7 +15,6 @@ export async function GET() {
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
       include: {
-        charity: true,
         provider: true,
       },
     });
@@ -41,7 +40,6 @@ export async function GET() {
         email: user.email,
         name: user.name,
         role: user.role,
-        charity: user.charity,
         provider: provider,
       },
       message: "تم تسجيل الدخول بنجاح",

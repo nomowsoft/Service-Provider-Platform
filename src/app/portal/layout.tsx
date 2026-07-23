@@ -18,7 +18,6 @@ export default async function PortalLayout({
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
     include: {
-      charity: true,
       provider: true,
     },
   });
@@ -32,7 +31,6 @@ export default async function PortalLayout({
     email: user.email,
     name: user.name,
     role: user.role,
-    charity: user.charity ? { id: user.charity.id, name: user.charity.name } : null,
     provider: user.provider ? { id: user.provider.id, name: user.provider.name } : null,
   };
 
@@ -58,7 +56,7 @@ export default async function PortalLayout({
             <div className="flex flex-col items-end">
               <span className="text-sm font-semibold text-emerald-950 dark:text-white">{user.name}</span>
               <span className="text-[11px] text-emerald-500 font-medium">
-                {user.role === "SUPER_ADMIN" ? "مدير النظام" : user.role === "CHARITY_STAFF" ? "ممثل جمعية" : "ممثل مزود خدمة"}
+                {user.role === "SUPER_ADMIN" ? "مدير النظام" : "ممثل مزود خدمة"}
               </span>
             </div>
             <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-100 dark:border-emerald-800 font-bold">

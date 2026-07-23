@@ -96,7 +96,6 @@ export async function POST(request: Request) {
       email: result.user.email,
       name: result.user.name,
       role: result.user.role,
-      charityId: null,
       providerId: result.user.providerId,
     };
 

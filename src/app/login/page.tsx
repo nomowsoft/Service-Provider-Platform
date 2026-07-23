@@ -105,7 +105,15 @@ export default function LoginPage() {
             </div>
 
             <div className="input-group">
-              <label htmlFor="password">كلمة المرور</label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="password">كلمة المرور</label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors underline"
+                >
+                  نسيت كلمة المرور؟
+                </Link>
+              </div>
               <div className="relative">
                 <input
                   id="password"

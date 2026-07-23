@@ -8,8 +8,7 @@ export interface SessionPayload {
   userId: number;
   email: string;
   name: string;
-  role: string; // "SUPER_ADMIN", "CHARITY_STAFF", "SERVICE_PROVIDER"
-  charityId: number | null;
+  role: string; // "SUPER_ADMIN", "SERVICE_PROVIDER"
   providerId: number | null;
 }
 

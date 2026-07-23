@@ -23,7 +23,6 @@ export async function POST(request: Request) {
     const user = await prisma.user.findUnique({
       where: { email },
       include: {
-        charity: true,
         provider: true,
       },
     });
@@ -50,7 +49,6 @@ export async function POST(request: Request) {
       email: user.email,
       name: user.name,
       role: user.role,
-      charityId: user.charityId,
       providerId: user.providerId,
     };
 
@@ -65,7 +63,6 @@ export async function POST(request: Request) {
         email: user.email,
         name: user.name,
         role: user.role,
-        charity: user.charity,
         provider: user.provider,
       },
       token,

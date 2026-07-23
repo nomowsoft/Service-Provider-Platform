@@ -34,6 +34,7 @@ export const priceOfferSchema = z.object({
       productId: z.coerce.number({ message: "يرجى تحديد المنتج" }),
       price: z.coerce.number().positive({ message: "قيمة عرض السعر يجب أن تكون أكبر من 0" }),
       qty: z.coerce.number().positive({ message: "الكمية يجب أن تكون أكبر من 0" }).default(1),
+      discount: z.coerce.number().min(0).optional().default(0),
     })
   ).min(1, "يجب إضافة منتج واحد على الأقل"),
   provider_note: z.string().optional(),
@@ -133,7 +134,23 @@ export const registerSchema = z.object({
     ),
   password: passwordSchema,
   confirmPassword: z.string().min(1, { message: "يرجى تأكيد كلمة المرور" }),
-  role: z.enum(["SERVICE_PROVIDER", "CHARITY_STAFF"]).default("SERVICE_PROVIDER"),
+  role: z.enum(["SERVICE_PROVIDER"]).default("SERVICE_PROVIDER"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "كلمة المرور وتأكيدها غير متطابقتين",
+  path: ["confirmPassword"],
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .min(1, { message: "يرجى إدخال البريد الإلكتروني" })
+    .email({ message: "البريد الإلكتروني غير صحيح" }),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, { message: "رمز إعاده التعيين (Token) مفقود" }),
+  password: passwordSchema,
+  confirmPassword: z.string().min(1, { message: "يرجى تأكيد كلمة المرور" }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "كلمة المرور وتأكيدها غير متطابقتين",
   path: ["confirmPassword"],

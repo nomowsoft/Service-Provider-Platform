@@ -226,6 +226,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
         productId: Number(l.productId),
         price: parseFloat(l.price),
         qty: parseFloat(l.qty || "1") || 1,
+        discount: parseFloat(l.discount || "0") || 0,
       }));
 
       const res = await fetch(`/api/requests/${id}`, {
@@ -864,7 +865,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             )}
 
             {/* C: Form for Charity Staff / Admin to review a submitted financial claim */}
-            {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && localStatus === "CLAIM_REVIEW" && (
+            {role === "SUPER_ADMIN" && localStatus === "CLAIM_REVIEW" && (
               <div className="space-y-4">
                 <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 p-4 border border-amber-100/30 flex items-center gap-3 text-xs text-amber-800 dark:text-amber-300">
                   <Coins size={18} />
@@ -919,7 +920,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
               </div>
             )}
 
-            {(role === "CHARITY_STAFF" || role === "SUPER_ADMIN") && localStatus === "RAISING_CLAIM" && (
+            {role === "SUPER_ADMIN" && localStatus === "RAISING_CLAIM" && (
               <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-5 border border-emerald-100/30 flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300 font-medium">
                 <Wrench size={18} />
                 <span>الطلب قيد العمل والتشغيل حالياً من قبل مزود الخدمة ({request.serviceProvider?.name}). بانتظار قيام المزود برفع المطالبة المالية للصرف.</span>

@@ -18,7 +18,17 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
-  ShieldCheck
+  ShieldCheck,
+  Mail,
+  Server,
+  History,
+  RefreshCw,
+  Search,
+  CheckCircle2,
+  XCircle,
+  Info,
+  Wifi,
+  Send
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { changePasswordSchema } from "@/utils/validation";
@@ -28,13 +38,6 @@ interface UserType {
   name: string;
   email: string;
   role: string;
-  charity?: {
-    id: number;
-    name: string;
-    licenseNumber: string;
-    description: string;
-    phone: string;
-  } | null;
   provider?: {
     id: number;
     name: string;
@@ -78,6 +81,144 @@ export default function SettingsPage() {
 
   // API Config (Mock keys for beautiful visual UX)
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // SMTP Settings state (Super Admin Only)
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState(587);
+  const [smtpSecure, setSmtpSecure] = useState(false);
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [smtpFromEmail, setSmtpFromEmail] = useState("");
+  const [smtpFromName, setSmtpFromName] = useState("فريق دعم سرب");
+  const [smtpSaving, setSmtpSaving] = useState(false);
+  const [smtpLoading, setSmtpLoading] = useState(false);
+  const [smtpTesting, setSmtpTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTestSmtp = async () => {
+    setSmtpTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/admin/smtp/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpSecure,
+          user: smtpUser,
+          password: smtpPassword,
+        }),
+      });
+      const data = await res.json();
+      const isSuccess = res.ok && Boolean(data.success);
+      setTestResult({
+        success: isSuccess,
+        message: data.message || (isSuccess ? "تم الاتصال بنجاح" : "فشل الاتصال"),
+      });
+
+      if (isSuccess) {
+        toast.success(data.message);
+      } else {
+        toast.error(data.message || "فشل الاتصال بخادم البريد");
+      }
+    } catch (error) {
+      const err = error as Error;
+      setTestResult({
+        success: false,
+        message: err.message || "حدث خطأ أثناء اختبار الاتصال",
+      });
+      toast.error(err.message || "فشل الاتصال بخادم البريد");
+    } finally {
+      setSmtpTesting(false);
+    }
+  };
+
+  const fetchSmtpSettings = useCallback(async () => {
+    if (user?.role !== "SUPER_ADMIN") return;
+    setSmtpLoading(true);
+    try {
+      const res = await fetch("/api/admin/smtp");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.smtp) {
+          setSmtpHost(data.smtp.host || "");
+          setSmtpPort(data.smtp.port || 587);
+          setSmtpSecure(data.smtp.secure || false);
+          setSmtpUser(data.smtp.user || "");
+          setSmtpPassword(data.smtp.password || "");
+          setSmtpFromEmail(data.smtp.fromEmail || "");
+          setSmtpFromName(data.smtp.fromName || "فريق دعم سرب");
+        }
+      }
+    } catch (error) {
+      console.error("Fetch SMTP Error:", error);
+    } finally {
+      setSmtpLoading(false);
+    }
+  }, [user?.role]);
+
+  useEffect(() => {
+    if (activeTab === "smtp" && user?.role === "SUPER_ADMIN") {
+      fetchSmtpSettings();
+    }
+  }, [activeTab, user?.role, fetchSmtpSettings]);
+
+  const handleSaveSmtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSmtpSaving(true);
+    try {
+      const res = await fetch("/api/admin/smtp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpSecure,
+          user: smtpUser,
+          password: smtpPassword,
+          fromEmail: smtpFromEmail,
+          fromName: smtpFromName,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "فشل حفظ إعدادات SMTP");
+      toast.success("تم حفظ إعدادات خادم البريد (SMTP) بنجاح!");
+    } catch (error) {
+      const err = error as Error;
+      toast.error(err.message || "حدث خطأ أثناء حفظ الإعدادات");
+    } finally {
+      setSmtpSaving(false);
+    }
+  };
+
+  // Email Logs State (Super Admin Only)
+  const [emailLogs, setEmailLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [emailSearchTerm, setEmailSearchTerm] = useState("");
+  const [emailStatusFilter, setEmailStatusFilter] = useState<"ALL" | "SUCCESS" | "FAILED" | "MOCK">("ALL");
+
+  const fetchEmailLogs = useCallback(async () => {
+    if (user?.role !== "SUPER_ADMIN") return;
+    setLogsLoading(true);
+    try {
+      const res = await fetch("/api/admin/email-logs");
+      if (res.ok) {
+        const data = await res.json();
+        setEmailLogs(data.logs || []);
+      }
+    } catch (error) {
+      console.error("Fetch Email Logs Error:", error);
+    } finally {
+      setLogsLoading(false);
+    }
+  }, [user?.role]);
+
+  useEffect(() => {
+    if (activeTab === "email-logs" && user?.role === "SUPER_ADMIN") {
+      fetchEmailLogs();
+    }
+  }, [activeTab, user?.role, fetchEmailLogs]);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -364,15 +505,11 @@ export default function SettingsPage() {
 
   // Developer integration details based on role
   const mockPublicKey = user
-    ? (user.role === "CHARITY_STAFF"
-      ? `pub_charity_live_9a87d623${user.charity?.id || 1}eb21`
-      : `pub_provider_live_8f3d2e1c${user.provider?.id || 1}ab90`)
+    ? `pub_provider_live_8f3d2e1c${user.provider?.id || 1}ab90`
     : "";
 
   const mockSecretKey = user
-    ? (user.role === "CHARITY_STAFF"
-      ? `sec_charity_live_3d21f8a7${user.charity?.id || 1}ee55`
-      : (user.provider?.apiCode || `code_9b4e1a2f${user.provider?.id || 1}dd44`))
+    ? (user.provider?.apiCode || `code_9b4e1a2f${user.provider?.id || 1}dd44`)
     : "";
 
   const sortedCharities = [...charities].sort((a, b) => {
@@ -421,7 +558,7 @@ export default function SettingsPage() {
             <span>تغيير كلمة المرور</span>
           </button>
 
-          {(user?.role === "CHARITY_STAFF" || user?.role === "SERVICE_PROVIDER") && (
+          {(user?.role === "SERVICE_PROVIDER" || user?.role === "SUPER_ADMIN") && (
             <button
               onClick={() => setActiveTab("developer")}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition ${activeTab === "developer"
@@ -445,6 +582,32 @@ export default function SettingsPage() {
               <Building size={16} />
               <span>الجمعيات</span>
             </button>
+          )}
+
+          {user?.role === "SUPER_ADMIN" && (
+            <>
+              <button
+                onClick={() => setActiveTab("smtp")}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition ${activeTab === "smtp"
+                  ? "bg-emerald-950 text-white shadow-sm"
+                  : "bg-white dark:bg-[#03251c]/30 text-emerald-800 dark:text-emerald-300 border border-emerald-100/50 hover:bg-emerald-50"
+                  }`}
+              >
+                <Mail size={16} />
+                <span>إعدادات البريد (SMTP)</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab("email-logs")}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition ${activeTab === "email-logs"
+                  ? "bg-emerald-950 text-white shadow-sm"
+                  : "bg-white dark:bg-[#03251c]/30 text-emerald-800 dark:text-emerald-300 border border-emerald-100/50 hover:bg-emerald-50"
+                  }`}
+              >
+                <History size={16} />
+                <span>سجل رسائل البريد</span>
+              </button>
+            </>
           )}
         </div>
 
@@ -645,23 +808,13 @@ export default function SettingsPage() {
                   <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-4 border border-emerald-100/20 space-y-2">
                     <span className="text-xs font-bold text-slate-500 block">الجهة المعرفة للربط:</span>
                     <div className="flex items-center gap-3">
-                      {user?.role === "CHARITY_STAFF" ? (
-                        <>
-                          <Building className="text-emerald-700" size={20} />
-                          <div>
-                            <span className="text-sm font-bold text-emerald-950 dark:text-white block">{user?.charity?.name}</span>
-                            <span className="text-[10px] text-slate-400">معرف الجهة: {user?.charity?.id}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <Wrench className="text-amber-600" size={20} />
-                          <div>
-                            <span className="text-sm font-bold text-emerald-950 dark:text-white block">{user?.provider?.name}</span>
-                            <span className="text-[10px] text-slate-400">معرف مزود الخدمة: {user?.provider?.id}</span>
-                          </div>
-                        </>
-                      )}
+                      <>
+                        <Wrench className="text-amber-600" size={20} />
+                        <div>
+                          <span className="text-sm font-bold text-emerald-950 dark:text-white block">{user?.provider?.name || "مزود الخدمة"}</span>
+                          <span className="text-[10px] text-slate-400">معرف مزود الخدمة: {user?.provider?.id || 1}</span>
+                        </div>
+                      </>
                     </div>
                   </div>
 
@@ -929,6 +1082,331 @@ export default function SettingsPage() {
                     </table>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Tab: SMTP Email Settings (Super Admin Only) */}
+            {activeTab === "smtp" && user?.role === "SUPER_ADMIN" && (
+              <div className="space-y-6">
+                <div className="border-b border-emerald-50 dark:border-emerald-950 pb-3 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-extrabold text-emerald-950 dark:text-white flex items-center gap-2">
+                      <Mail className="text-emerald-600" size={20} />
+                      إعدادات خادم البريد الإلكتروني (SMTP)
+                    </h2>
+                    <p className="text-[10px] text-slate-500 mt-1">تكوين بيانات الاتصال بخادم البريد لإرسال رسائل إعادة تعيين كلمة المرور والتنبيهات (خاصة بمدير النظام)</p>
+                  </div>
+                </div>
+
+                {smtpLoading ? (
+                  <div className="flex h-40 items-center justify-center">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveSmtp} className="space-y-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="input-group">
+                        <label>عنوان خادم SMTP (Host)</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="smtp.example.com"
+                            value={smtpHost}
+                            onChange={(e) => setSmtpHost(e.target.value)}
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="input-group">
+                        <label>منفذ الخادم (Port)</label>
+                        <input
+                          type="number"
+                          placeholder="587"
+                          value={smtpPort}
+                          onChange={(e) => setSmtpPort(parseInt(e.target.value, 10) || 587)}
+                          className="w-full"
+                        />
+                      </div>
+
+                      <div className="input-group">
+                        <label>اسم المستخدم (SMTP User / Email)</label>
+                        <input
+                          type="text"
+                          placeholder="user@example.com"
+                          value={smtpUser}
+                          onChange={(e) => setSmtpUser(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+
+                      <div className="input-group">
+                        <label>كلمة المرور (SMTP Password)</label>
+                        <input
+                          type="password"
+                          placeholder="••••••••"
+                          value={smtpPassword}
+                          onChange={(e) => setSmtpPassword(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+
+                      <div className="input-group">
+                        <label>بريد المرسل (From Email)</label>
+                        <input
+                          type="email"
+                          placeholder="no-reply@yourdomain.com"
+                          value={smtpFromEmail}
+                          onChange={(e) => setSmtpFromEmail(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+
+                      <div className="input-group">
+                        <label>اسم المرسل (From Name)</label>
+                        <input
+                          type="text"
+                          placeholder="فريق دعم سرب"
+                          value={smtpFromName}
+                          onChange={(e) => setSmtpFromName(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 p-4 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-2xl border border-emerald-100 dark:border-emerald-950">
+                      <input
+                        type="checkbox"
+                        id="smtpSecure"
+                        checked={smtpSecure}
+                        onChange={(e) => setSmtpSecure(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <label htmlFor="smtpSecure" className="text-xs font-bold text-emerald-950 dark:text-emerald-200 cursor-pointer">
+                        استخدام اتصال مشفر مسبقاً (SSL / TLS Secure - Port 465)
+                      </label>
+                    </div>
+
+                    {testResult && (
+                      <div
+                        className={`rounded-2xl p-4 border text-xs font-bold flex items-center gap-2.5 animate-in fade-in duration-200 ${
+                          testResult.success
+                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                            : "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
+                        }`}
+                      >
+                        {testResult.success ? (
+                          <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                        ) : (
+                          <XCircle className="h-5 w-5 text-rose-500 flex-shrink-0" />
+                        )}
+                        <span className="leading-relaxed">{testResult.message}</span>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-emerald-50/50">
+                      <button
+                        type="button"
+                        onClick={handleTestSmtp}
+                        disabled={smtpTesting || smtpSaving}
+                        className="w-full sm:w-auto bg-slate-100 dark:bg-emerald-950/40 hover:bg-emerald-50 text-slate-800 dark:text-emerald-200 border border-slate-200 dark:border-emerald-900/40 rounded-xl py-3 px-6 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                      >
+                        <Wifi size={16} className={smtpTesting ? "animate-pulse text-emerald-500" : "text-emerald-600"} />
+                        <span>{smtpTesting ? "جاري فحص الاتصال بالخادم..." : "اختبار الاتصال بالخادم"}</span>
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={smtpSaving || smtpTesting}
+                        className="w-full sm:w-auto rounded-xl py-3 px-6 text-xs font-bold text-white gradient-btn cursor-pointer disabled:opacity-50"
+                      >
+                        {smtpSaving ? "جاري الحفظ..." : "حفظ إعدادات خادم البريد"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {/* Tab: Email Logs (Super Admin Only) */}
+            {activeTab === "email-logs" && user?.role === "SUPER_ADMIN" && (
+              <div className="space-y-6">
+                <div className="border-b border-emerald-50 dark:border-emerald-950 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-extrabold text-emerald-950 dark:text-white flex items-center gap-2">
+                      <History className="text-emerald-600" size={20} />
+                      سجل رسائل البريد الإلكتروني الصادرة
+                    </h2>
+                    <p className="text-[10px] text-slate-500 mt-1">متابعة حالة وتفاصيل كافة رسائل البريد الصادرة من المنصة (نجاح الإرسال، الفشل، أو وضع التطوير)</p>
+                  </div>
+                  <button
+                    onClick={fetchEmailLogs}
+                    disabled={logsLoading}
+                    className="self-start sm:self-auto bg-slate-100 dark:bg-emerald-950/40 hover:bg-emerald-50 text-slate-700 dark:text-emerald-300 border border-slate-200 dark:border-emerald-900/40 rounded-xl px-3.5 py-2 text-xs font-bold flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <RefreshCw size={14} className={logsLoading ? "animate-spin" : ""} />
+                    <span>تحديث السجل</span>
+                  </button>
+                </div>
+
+                {/* Summary Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-slate-50 dark:bg-emerald-950/20 border border-slate-100 dark:border-emerald-950/40 rounded-2xl p-3 text-center">
+                    <span className="text-[10px] font-bold text-slate-500 block">إجمالي الرسائل</span>
+                    <span className="text-lg font-extrabold text-slate-900 dark:text-white mt-1 block">{emailLogs.length}</span>
+                  </div>
+                  <div className="bg-emerald-50/50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl p-3 text-center">
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 block">ناجحة</span>
+                    <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-300 mt-1 block">
+                      {emailLogs.filter((l) => l.status === "SUCCESS").length}
+                    </span>
+                  </div>
+                  <div className="bg-rose-50/50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/40 rounded-2xl p-3 text-center">
+                    <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 block">فاشلة</span>
+                    <span className="text-lg font-extrabold text-rose-600 dark:text-rose-400 mt-1 block">
+                      {emailLogs.filter((l) => l.status === "FAILED").length}
+                    </span>
+                  </div>
+                  <div className="bg-amber-50/50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/40 rounded-2xl p-3 text-center">
+                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 block">وضع التجربة</span>
+                    <span className="text-lg font-extrabold text-amber-600 dark:text-amber-300 mt-1 block">
+                      {emailLogs.filter((l) => l.status === "MOCK").length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Filter and Search Bar */}
+                <div className="flex flex-col sm:flex-row gap-3 justify-between items-center bg-slate-50/50 dark:bg-[#021b14]/50 p-3 rounded-2xl border border-slate-100 dark:border-emerald-950/60">
+                  <div className="relative w-full sm:w-64">
+                    <input
+                      type="text"
+                      placeholder="بحث بالبريد الإلكتروني..."
+                      value={emailSearchTerm}
+                      onChange={(e) => setEmailSearchTerm(e.target.value)}
+                      className="w-full text-xs py-2 pr-9 pl-3 border border-slate-200 dark:border-emerald-950 rounded-xl bg-white dark:bg-[#03251c]/40"
+                    />
+                    <Search className="absolute right-3 top-2.5 text-slate-400" size={14} />
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-1 bg-white dark:bg-[#021f18] p-1 rounded-xl border border-slate-200 dark:border-emerald-950/60 text-[10px] font-bold w-full sm:w-auto justify-center">
+                    <button
+                      onClick={() => setEmailStatusFilter("ALL")}
+                      className={`px-3 py-1.5 rounded-lg transition ${emailStatusFilter === "ALL" ? "bg-emerald-950 text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}
+                    >
+                      الكل
+                    </button>
+                    <button
+                      onClick={() => setEmailStatusFilter("SUCCESS")}
+                      className={`px-3 py-1.5 rounded-lg transition ${emailStatusFilter === "SUCCESS" ? "bg-emerald-600 text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}
+                    >
+                      ناجحة
+                    </button>
+                    <button
+                      onClick={() => setEmailStatusFilter("FAILED")}
+                      className={`px-3 py-1.5 rounded-lg transition ${emailStatusFilter === "FAILED" ? "bg-rose-600 text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}
+                    >
+                      فاشلة
+                    </button>
+                    <button
+                      onClick={() => setEmailStatusFilter("MOCK")}
+                      className={`px-3 py-1.5 rounded-lg transition ${emailStatusFilter === "MOCK" ? "bg-amber-600 text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}
+                    >
+                      تجربة
+                    </button>
+                  </div>
+                </div>
+
+                {/* Table */}
+                {logsLoading ? (
+                  <div className="flex h-40 items-center justify-center">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+                  </div>
+                ) : (
+                  <div className="border border-slate-100 dark:border-emerald-950/50 rounded-2xl overflow-hidden bg-white dark:bg-[#03251c]/10">
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-right text-xs whitespace-nowrap lg:whitespace-normal">
+                        <thead>
+                          <tr className="bg-slate-50 dark:bg-emerald-950/20 text-slate-500 font-bold border-b border-slate-100 dark:border-emerald-950/40">
+                            <th className="p-4">المستلم (To)</th>
+                            <th className="p-4">الموضوع</th>
+                            <th className="p-4 text-center">حالة الإرسال</th>
+                            <th className="p-4">التفاصيل / ملاحظات الخطأ</th>
+                            <th className="p-4 text-left">تاريخ الإرسال</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-emerald-950/40">
+                          {emailLogs
+                            .filter((log) => {
+                              const matchesSearch =
+                                !emailSearchTerm ||
+                                log.toEmail?.toLowerCase().includes(emailSearchTerm.toLowerCase()) ||
+                                log.subject?.toLowerCase().includes(emailSearchTerm.toLowerCase());
+                              const matchesStatus =
+                                emailStatusFilter === "ALL" || log.status === emailStatusFilter;
+                              return matchesSearch && matchesStatus;
+                            })
+                            .map((log) => (
+                              <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-emerald-950/20 transition">
+                                <td className="p-4 font-bold text-slate-900 dark:text-white dir-ltr text-right">
+                                  {log.toEmail}
+                                </td>
+                                <td className="p-4 font-medium text-slate-700 dark:text-slate-300">
+                                  {log.subject}
+                                </td>
+                                <td className="p-4 text-center">
+                                  {log.status === "SUCCESS" && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                      <CheckCircle2 size={12} />
+                                      تم الإرسال بنجاح
+                                    </span>
+                                  )}
+                                  {log.status === "FAILED" && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                                      <XCircle size={12} />
+                                      فشل الإرسال
+                                    </span>
+                                  )}
+                                  {log.status === "MOCK" && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                      <Info size={12} />
+                                      وضع التطوير (Console)
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-4 max-w-xs truncate text-[11px] text-slate-500 dark:text-slate-400">
+                                  {log.error ? (
+                                    <span className="text-rose-500 dark:text-rose-400 font-medium" title={log.error}>
+                                      {log.error}
+                                    </span>
+                                  ) : (
+                                    <span className="text-emerald-600 dark:text-emerald-400">لا توجد أخطاء</span>
+                                  )}
+                                </td>
+                                <td className="p-4 text-left text-[11px] text-slate-400 dark:text-slate-500 dir-ltr">
+                                  {new Date(log.createdAt).toLocaleString("ar-SA", {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </td>
+                              </tr>
+                            ))}
+
+                          {emailLogs.length === 0 && (
+                            <tr>
+                              <td colSpan={5} className="p-8 text-center text-slate-400 text-xs">
+                                لا توجد سجلات رسائل بريد صادرة حتى الآن.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

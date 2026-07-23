@@ -57,7 +57,7 @@ const DEFAULT_DOMAIN = "http://192.168.100.82:8021";
  * allowed to query, enriched with `apiCode` from the owning provider.
  */
 export async function getCharitiesToSync(session: SessionPayload): Promise<SyncCharity[]> {
-  const { role, charityId, providerId } = session;
+  const { role, providerId } = session;
 
   if (role === "SERVICE_PROVIDER" && providerId) {
     const provider = await prisma.serviceProvider.findUnique({
@@ -69,18 +69,6 @@ export async function getCharitiesToSync(session: SessionPayload): Promise<SyncC
       ...c,
       apiCode: provider.apiCode,
     })) as unknown as SyncCharity[];
-  }
-
-  if (role === "CHARITY_STAFF" && charityId) {
-    const charity = await prisma.charity.findUnique({
-      where: { id: charityId },
-      include: { provider: true },
-    });
-    if (!charity || charity.status !== "CONNECTED" || !charity.token) return [];
-    return [{
-      ...charity,
-      apiCode: charity.provider?.apiCode || null,
-    }] as unknown as SyncCharity[];
   }
 
   if (role === "SUPER_ADMIN") {

@@ -22,7 +22,6 @@ interface UserProfile {
   email: string;
   name: string;
   role: string;
-  charity?: { name: string; id: number } | null;
   provider?: { name: string; id: number } | null;
 }
 
@@ -85,8 +84,6 @@ export default function Sidebar({ user }: SidebarProps) {
     switch (user.role) {
       case "SUPER_ADMIN":
         return { label: "المدير العام", bg: "bg-emerald-500/20 text-emerald-300", icon: ShieldCheck };
-      case "CHARITY_STAFF":
-        return { label: user.charity?.name || "جمعية أهلية", bg: "bg-teal-500/20 text-teal-300", icon: Building };
       case "SERVICE_PROVIDER":
         return { label: user.provider?.name || "مزود الخدمة", bg: "bg-amber-500/20 text-amber-300", icon: Wrench };
       default:
